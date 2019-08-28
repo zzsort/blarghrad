@@ -1,0 +1,108 @@
+ArghRad v3.00 TEST  (please do not redistribute)
+ [Original -  8/28/04]
+ [Update 1 -  8/30/04 - bounced light var fix]
+ [Update 2 -  9/ 1/04 - transparent texture fix]
+ [Update 3 -  9/10/04 - zero patch area fix]
+ [Update 4 -  9/20/04 - hidden patch fix,
+                        shadowface testing fix]
+ [Update 5 -  9/23/04 - portal-face Phong fix]
+ [Update 6 - 10/16/04 - bounced light Phong fixes,
+                        bounced light precision fix,
+                        Phong-shading fix]
+ [Update 7 - 12/ 1/04 - lightsample coords fixes,
+                        splotchfix improvements,
+                        Phong-shading fix]
+ [Update 8 -  3/24/05 - added -lightwarp option,
+                        added -noweightcurve option,
+                        added -nonudgefix option,
+                        made ~20% overall speedup]
+ [Update 9 -  8/ 6/05 - testline fix,
+                        lightsample coords fixes,
+                        multithreading fixes,
+                        revised shadowfaces,
+                        increased MAX_MAP_LIGHTING,
+                        added -noshadowfilter option,
+                        added -noshadowface option]
+
+Whee, time for beta-testing!  I'd like to thank everyone for their continued 
+interest after all this time. :)  This is the short list of all the new 
+stuff.  Check out the new, overhauled manual currently at 
+http://ntplx.net/~argh/arghrad for more details on everything (see History 
+index sections 3.00 & 2.50.  Note: example maps not yet available).  You can 
+send me feedback at argh@ntplx.net.
+
+Misc features:
+ * Added texture format support for: TGA (32/24-bit), JPG, M32, M8, & PCX.
+ * Support for .pak files with any name.
+ * Better automatic detection of game, gamedir & moddir from bsp path.
+ * Displays a table of texture reflectivity/emitted colors in -v mode.
+ * Support for up to 9 suns.
+ * Various bugfixes.
+
+Worldspawn:
+ _sky_ambient    - Synonym for _sun_ambient.
+ _sky_surface    - Synonym for _sun_surface.
+ _sun*_style $   - Set a lightstyle # for sun, or use the targetname of a
+                   triggered light to make sun use the same trigger.
+ _shadow # #     - Make visible world faces with NODRAW flag cast shadows.
+                   First # for non-TRANS* faces, second # for TRANS* faces:
+                      0  no shadows                              (default=1 3)
+                      1  black shadows
+                      2  single-color shadows (uses reflectivity)
+                      3  projects the texture
+
+Light Entities:
+ _bounce #       - Set to 0 to make this light not bounce.
+ _cap #          - Cap light brightness at #.
+ _diffade #      - Used by _sun.
+ _diffuse #      - Used by _sun.
+ _distance #     - Set fade distance in units.  Result depends on _falloff:
+                     0   = smoothly fades out over # units (overrides _fade)
+                     1,2 = abruptly cuts off at # units
+ _lighttag #     - Make this light control all LIGHT faces with a value of #.
+                   Those faces will use this light's: _color, _distance, 
+                   _focus, light, _lightmin, & style.
+ _sun #          - Make this light define a sun.  The sun will use this
+                   light's: _color, _diffade, _diffuse, light, & style.
+
+BModels:
+ _distance       - Works like light's _distance (with falloff 2).
+ _lightorigin # # # - Shift bmodel to coordinate (#,#,#) for lighting.
+ _lightswitch $  - Set to targetname of a triggered light to make this
+                   bmodel's light use the same trigger.
+ _shadow # #     - Make visible bmodel faces with NODRAW flag cast shadows.
+                   First # for non-TRANS* faces, second # for TRANS* faces:
+                     0  no shadows                               (default=0 0)
+                     1  black shadows
+                     2  single-color shadows (uses reflectivity)
+                     3  projects the texture
+                   Make either # negative (-1, -2, -3) to force all the 
+                   bmodel's faces (not just NODRAW) to cast shadows.
+
+Command-Line:
+ -game $         - Set game: Q2 (default Quake2), H2 (Heretic2), KP (KingPin).
+ -gamma #        - Apply gamma curve to final lighting.
+ -lightwarp      - Create lightmaps for WARP surfaces.
+ -minlighta #    - (changed) Cap minimum style-0 light brightness at #.
+ -minlight #     - (changed) Same as -minlighta but uses id's 0-2 range.
+ -nobouncefix    - Disable fix for bmodels getting too much bounced light.
+ -nobrightsurf   - Don't make faces with LIGHT flag bright.
+ -noinvisfix     - Disable fix for invisible bmodel faces bouncing light.
+ -nonudgefix     - Disable new method of nudging edge lightsample coords.
+ -noradorigin    - Disable fix for origin'd bmodels getting no bounced light.
+ -noshadowface   - Disable all shadowfaces.
+ -noshadowfilter - Disable bilinear filtering on shadowface projections.
+ -noweightcurve  - Don't weight Phong curve calculations by face size.
+ -saturation #   - Set saturation scale of colored light.
+ -stylemin #     - Set minimum brightness cutoff for non-style-0 lights.
+ -update         - Disable light calcs & just update existing lightmaps with:
+                   -ambienta, -ambient, -gamma, -maxlighta, -maxlight, 
+                   -minlighta, -minlight, -nocolor, -nocoloru, -saturation, &
+                   -scale.
+
+
+The scary obligatory legal disclaimer:
+  Usage of ArghRad is at your own risk.  I accept NO responsibility
+  for any form of damage incurred through the usage of this program.
+
+- Tim Wright (Argh!)

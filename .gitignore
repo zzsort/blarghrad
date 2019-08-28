@@ -1,0 +1,6 @@
+/src/.vs/*
+/src/Debug/*
+/src/Release/*
+/src/x64/*
+*.filters
+*.user
