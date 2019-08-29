@@ -45,7 +45,9 @@ typedef struct
     triangle_t	tris[MAX_TRI_TRIS];
     vec3_t		maybe_origins[MAX_TRI_POINTS];   // argh uses this instead of points[]->origins in some places
 } triangulation_t;
-
+#ifdef _M_IX86
+static_assert(sizeof(triangulation_t) == 4407316, "");
+#endif
 
 /*
 ===============
@@ -149,7 +151,7 @@ void TriEdge_r(triangulation_t *trian, triedge_t *e)
     // find the point with the best angle
     vec3_t& p0 = trian->points[e->p0]->origin;
     vec3_t& p1 = trian->points[e->p1]->origin;
-    best = 1.1;
+    best = 1.1f;
     for (i = 0; i < trian->numpoints; i++)
     {
         vec3_t& p = trian->points[i]->origin;
@@ -252,6 +254,12 @@ void TriangulatePoints(triangulation_t *trian)
                 }
             }
         }
+    }
+
+    
+    if (bestd == 99999) {
+        printf("// TODO bp1/bp2 are uninitialized if bestd==99999. check if this happens in the original\n");
+        return;
     }
 
     e = FindEdge(trian, bp1, bp2);
@@ -1187,7 +1195,7 @@ void FinalLightFace(int facenum)
             face_patches[facenum]->origin.x, face_patches[facenum]->origin.y, face_patches[facenum]->origin.z);
     }
 
-    for (i = 0; fl->numstyles; i++) {
+    for (i = 0; i < fl->numstyles; i++) {
         f->styles[i] = fl->stylenums[i];
         for (int j = 0; j < fl->numsamples; j++) {
             float* pfVar8 = &fl->samples[i][j * 3]; // todo change float* to vec3_t*

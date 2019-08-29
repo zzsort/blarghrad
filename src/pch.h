@@ -9,7 +9,6 @@
 #include <io.h>
 #include <math.h>
 
-
 #ifndef __BYTEBOOL__
 #define __BYTEBOOL__
 //typedef enum {} qboolean;
@@ -17,7 +16,7 @@ typedef unsigned char byte;
 #endif
 
 #include <algorithm>
-
+#include <atomic>
 
 class qboolean final {
 public:

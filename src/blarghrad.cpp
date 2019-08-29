@@ -365,12 +365,8 @@ void MakeShadowModels(void)
 {
     const char *pcVar1;
     const char *pcVar2;
-    shadowfaces_unk_t **ppsVar3;
-    bool bVar4;
     int countModelFaces;
     int totalWorldspawnFaces;
-    int *pTrans;
-    int *pNonTrans;
     int totalModelFaces;
 
     memset(g_shadow_faces, 0, MAX_MAP_FACES);
@@ -750,16 +746,18 @@ float CollectLight(void)
     for (int i = 0; i < num_patches; i++, patch++)
     {
         // skys never collect light, it is just dropped
-        if (( texinfo[dfaces[patch->facenum].texinfo].flags & SURF_SKY) != 0)
+        if ((texinfo[dfaces[patch->facenum].texinfo].flags & SURF_SKY))
         {
             VectorClear(radiosity[i]);
             VectorClear(illumination[i]);
             continue;
         }
 
-        patch->totallight.x += illumination[i].x / patch->area;
-        patch->totallight.y += illumination[i].y / patch->area;
-        patch->totallight.z += illumination[i].z / patch->area;
+        if (patch->area != 0) {
+            patch->totallight.x += illumination[i].x / patch->area;
+            patch->totallight.y += illumination[i].y / patch->area;
+            patch->totallight.z += illumination[i].z / patch->area;
+        }
         radiosity[i].x = illumination[i].x * patch->reflectivity.x;
         radiosity[i].y = illumination[i].y * patch->reflectivity.y;
         radiosity[i].z = illumination[i].z * patch->reflectivity.z;
@@ -886,7 +884,7 @@ MakeTransfers
 
 =============
 */
-int	total_transfer;
+std::atomic<int> total_transfer;
 
 void MakeTransfers(int i)
 {
@@ -906,7 +904,7 @@ void MakeTransfers(int i)
     int			cluster;
 
     patch = patches + i;
-    total = 0.f;
+    total = 0;
 
     VectorCopy(patch->origin, origin);
     plane = *patch->plane;
@@ -914,17 +912,17 @@ void MakeTransfers(int i)
     if (!PvsForOrigin(patch->origin, pvs))
         return;
 
-    if (patch->area == 0.f) {
+    if (patch->area == 0) {
         return;
     }
 
-    float splotch_dist = 0.f;
+    float splotch_dist = 0;
     if (splotchfix != 0) {
         vec3_t mins, maxs;
         WindingBounds(patch->winding, mins, maxs);
         for (int i = 0; i < 3; i++) {
             float d = maxs.data[i] - mins.data[i];
-            if (splotch_dist < d) {
+            if (d > splotch_dist) {
                 splotch_dist = d;
             }
         }
@@ -943,7 +941,7 @@ void MakeTransfers(int i)
         if (j == i)
             continue;
 
-        if (patch2->area == 0.f)
+        if (patch2->area == 0)
             continue;
 
         // check pvs bit
@@ -971,7 +969,7 @@ void MakeTransfers(int i)
         }
         float p2_scale = -DotProduct(delta, patch2->field_0x6c);  // TODO - field_0x6c comes from maybePhongSomething. this value is takes the place of patch2->plane->normal, so it is probably related to a plane normal.
         float scale = p2_scale * p1_scale;
-        if (scale == 0.f)
+        if (scale == 0)
             continue;
 
         if (splotchfix && dist < splotch_dist) {
@@ -992,7 +990,7 @@ void MakeTransfers(int i)
         }
 
         trans = scale * patch2->area / (dist*dist);
-        if (trans <= patch_cutoff)
+        if (trans < patch_cutoff)
             continue;
 
         // check exact transfer
@@ -1014,8 +1012,6 @@ void MakeTransfers(int i)
     // be higher than PI
     if (patch->numtransfers)
     {
-        transfer_t	*t;
-
         if (patch->numtransfers < 0 || patch->numtransfers > MAX_PATCHES)
             Error("Weird numtransfers");
         s = patch->numtransfers * sizeof(transfer_t);
@@ -1027,7 +1023,7 @@ void MakeTransfers(int i)
         // normalize all transfers so all of the light
         // is transfered to the surroundings
         //
-        t = patch->transfers;
+        transfer_t* t = patch->transfers;
         itotal = 0;
         for (j = 0; j < num_patches; j++)
         {
@@ -1623,35 +1619,22 @@ CreateDirectLights
 void CreateDirectLights()
 {
     entity_t *ent;
-    byte bVar1;
     short sVar2;
-    unsigned int uVar3;
     const char *name;
     const char *pcVar4;
     entity_t *ent_00;
-    directlight_t *local_EAX_1643;
+    directlight_t *dl;
     dleaf_t *pdVar5;
     const char *targetname;
     const char *pcVar6;
     const char *pcVar7;
-    directlight_t *dl;
     int iVar11;
-    suninfo_t *psVar12;
-    byte *pbVar15;
-    const char *pcVar16;
-    byte *pbVar17;
-    directlight_t *pdVar18;
-    bool bVar19;
-    float fVar20;
     float fVar21;
     float fVar23;
     int num_surface_lights;
     int num_entity_lights;
-    double dStack96;
     float local_50;
     float local_4c;
-    float fStack72;
-    float fStack68;
     char key_prefix[12];
     char local_28[36];
 
@@ -1806,107 +1789,107 @@ void CreateDirectLights()
             }
             if (!strcmp(name, "light")) {
                 numdlights += 1;
-                local_EAX_1643 = (directlight_t *)malloc(sizeof(directlight_t));
-                if (!local_EAX_1643) {
+                dl = (directlight_t *)malloc(sizeof(directlight_t));
+                if (!dl) {
                     Error("CreateDirectLights: (entities) malloc failed");
                 }
-                *local_EAX_1643 = {};
-                local_EAX_1643->m_emittype = 1;
-                GetVectorForKey(ent, "origin", local_EAX_1643->m_origin);
-                pdVar5 = PointInLeaf(local_EAX_1643->m_origin);
+                *dl = {};
+                dl->m_emittype = emit_point;
+                GetVectorForKey(ent, "origin", dl->m_origin);
+                pdVar5 = PointInLeaf(dl->m_origin);
                 sVar2 = pdVar5->cluster;
-                local_EAX_1643->m_next = directlights[(int)sVar2];
-                directlights[(int)sVar2] = local_EAX_1643;
+                dl->m_next = directlights[(int)sVar2];
+                directlights[(int)sVar2] = dl;
                 fVar23 = FloatForKey(ent, "light");
                 if ((fVar23 == 0) && (fVar23 = FloatForKey(ent, "_light"), (fVar23 == 0))) {
-                    fVar23 = 300.00000000;
+                    fVar23 = 300.f;
                 }
-                local_EAX_1643->m_intensity = entity_scale * fVar23;
+                dl->m_intensity = entity_scale * fVar23;
                 pcVar4 = ValueForKey(ent, "_color");
                 if (!pcVar4 || !*pcVar4) {
-                    local_EAX_1643->m_color.x = 1;
-                    local_EAX_1643->m_color.y = 1;
-                    local_EAX_1643->m_color.z = 1;
+                    dl->m_color.x = 1;
+                    dl->m_color.y = 1;
+                    dl->m_color.z = 1;
                 }
                 else {
-                    sscanf(pcVar4, "%f %f %f", &local_EAX_1643->m_color.x, &local_EAX_1643->m_color.y, &local_EAX_1643->m_color.z);
-                    ColorNormalize(local_EAX_1643->m_color, local_EAX_1643->m_color);
+                    sscanf(pcVar4, "%f %f %f", &dl->m_color.x, &dl->m_color.y, &dl->m_color.z);
+                    ColorNormalize(dl->m_color, dl->m_color);
                 }
-                local_EAX_1643->m_style = (int)FloatForKey(ent, "_style");
-                if (local_EAX_1643->m_style == 0) {
-                    local_EAX_1643->m_style = (int)FloatForKey(ent, "style");
+                dl->m_style = (int)FloatForKey(ent, "_style");
+                if (dl->m_style == 0) {
+                    dl->m_style = (int)FloatForKey(ent, "style");
                 }
-                if ((local_EAX_1643->m_style < 0) || (local_EAX_1643->m_style > 255)) {
-                    local_EAX_1643->m_style = 0;
+                if ((dl->m_style < 0) || (dl->m_style > 255)) {
+                    dl->m_style = 0;
                 }
-                local_EAX_1643->m_cap = FloatForKey(ent, "_cap");
-                if (local_EAX_1643->m_cap == 0) {
-                    local_EAX_1643->m_cap = FloatForKey(ent, "cap");
+                dl->m_cap = FloatForKey(ent, "_cap");
+                if (dl->m_cap == 0) {
+                    dl->m_cap = FloatForKey(ent, "cap");
                 }
-                local_EAX_1643->m_bounce = 1;
+                dl->m_bounce = 1;
                 targetname = ValueForKey(ent, "_bounce");
                 if (((*targetname != 0) ||
                     (targetname = ValueForKey(ent, "bounce"), *targetname != 0)) &&
                     (iVar11 = atoi(targetname), iVar11 == 0)) {
-                    local_EAX_1643->m_bounce = 0;
+                    dl->m_bounce = 0;
                 }
                 targetname = ValueForKey(ent, "_falloff");
                 if (*targetname == 0) {
-                    local_EAX_1643->m_falloff = 0;
+                    dl->m_falloff = 0;
                 }
                 else {
                     iVar11 = atoi(targetname);
-                    local_EAX_1643->m_falloff = iVar11;
+                    dl->m_falloff = iVar11;
                 }
-                if ((local_EAX_1643->m_falloff < 0) || (2 < local_EAX_1643->m_falloff)) {
-                    local_EAX_1643->m_falloff = 0;
+                if ((dl->m_falloff < 0) || (2 < dl->m_falloff)) {
+                    dl->m_falloff = 0;
                 }
-                local_EAX_1643->m_distance = 1.f;
-                if (local_EAX_1643->m_falloff == 0) {
+                dl->m_distance = 1.f;
+                if (dl->m_falloff == 0) {
                     pcVar4 = ValueForKey(ent, "_fade");
                     if (((*pcVar4 != '\0') || (pcVar4 = ValueForKey(ent, "wait"), *pcVar4 != '\0')) ||
                         (pcVar4 = ValueForKey(ent, "_wait"), *pcVar4 != '\0')) {
-                        local_EAX_1643->m_distance = atof(pcVar4);
+                        dl->m_distance = atof(pcVar4);
                     }
-                    if (local_EAX_1643->m_distance < 0.f) {
-                        local_EAX_1643->m_distance = 0.f;
+                    if (dl->m_distance < 0.f) {
+                        dl->m_distance = 0.f;
                     }
                 }
                 pcVar4 = ValueForKey(ent, "_distance");
                 if (*pcVar4 != '\0') {
-                    if (local_EAX_1643->m_falloff == 0) {
-                        local_EAX_1643->m_distance = local_EAX_1643->m_intensity / atof(pcVar4);
+                    if (dl->m_falloff == 0) {
+                        dl->m_distance = dl->m_intensity / atof(pcVar4);
                     }
                     else {
-                        local_EAX_1643->m_distance = atof(pcVar4);
+                        dl->m_distance = atof(pcVar4);
                     }
                 }
                 pcVar4 = ValueForKey(ent, "_angfade");
                 if (*pcVar4 == '\0') {
                     pcVar4 = ValueForKey(ent, "_angwait");
                     if (*pcVar4 == '\0') {
-                        local_EAX_1643->m_angwait = 1.f;
+                        dl->m_angwait = 1.f;
                     }
                     else {
-                        local_EAX_1643->m_angwait = atof(pcVar4);
+                        dl->m_angwait = atof(pcVar4);
                     }
                 }
                 else {
-                    local_EAX_1643->m_angwait = atof(pcVar4);
+                    dl->m_angwait = atof(pcVar4);
                 }
-                if (local_EAX_1643->m_angwait < 0.f) {
-                    local_EAX_1643->m_angwait = 0.f;
+                if (dl->m_angwait < 0.f) {
+                    dl->m_angwait = 0.f;
                 }
                 pcVar4 = ValueForKey(ent, "_focus");
                 if (*pcVar4 == '\0') {
-                    local_EAX_1643->m_focus = 1.f;
+                    dl->m_focus = 1.f;
                 }
                 else {
                     fVar21 = atof(pcVar4);
-                    local_EAX_1643->m_focus = (float)fVar21;
+                    dl->m_focus = fVar21;
                 }
-                if (local_EAX_1643->m_focus < 0.f) {
-                    local_EAX_1643->m_focus = 0.f;
+                if (dl->m_focus < 0.f) {
+                    dl->m_focus = 0.f;
                 }
                 targetname = ValueForKey(ent, "target");
                 const char* mangle_value = ValueForKey(ent, "_spotangle");
@@ -1918,31 +1901,31 @@ void CreateDirectLights()
 
                 bool light_spot = !strcmp(name, "light_spot");
                 if (light_spot || *targetname || *pcVar6 || *mangle_value || *pcVar7) {
-                    local_EAX_1643->m_emittype = 2;
-                    local_EAX_1643->m_cone = FloatForKey(ent, "_cone");
-                    if (local_EAX_1643->m_cone == 0.f) {
-                        local_EAX_1643->m_cone = 10.f;
+                    dl->m_emittype = emit_spotlight;
+                    dl->m_cone = FloatForKey(ent, "_cone");
+                    if (dl->m_cone == 0.f) {
+                        dl->m_cone = 10.f;
                     }
-                    local_EAX_1643->m_cone = cos(local_EAX_1643->m_cone * (1 / 180.f) * Q_PI);
+                    dl->m_cone = cos(dl->m_cone * (1 / 180.f) * Q_PI);
                     if (light_spot) {
                         float ang = FloatForKey(ent, "angle");
                         if (ang == -1) {
                             if (ang != -2) {
-                                local_EAX_1643->m_normal.z = 0.00000000;
+                                dl->m_normal.z = 0.00000000;
                                 fVar21 = ang * (1/180.f) * Q_PI;
-                                local_EAX_1643->m_normal.x = cos(fVar21);
-                                local_EAX_1643->m_normal.y = sin(fVar21);
+                                dl->m_normal.x = cos(fVar21);
+                                dl->m_normal.y = sin(fVar21);
                             }
                             else {
-                                local_EAX_1643->m_normal.x = 0.f;
-                                local_EAX_1643->m_normal.y = 0.f;
-                                local_EAX_1643->m_normal.z = -1.f;
+                                dl->m_normal.x = 0.f;
+                                dl->m_normal.y = 0.f;
+                                dl->m_normal.z = -1.f;
                             }
                         }
                         else {
-                            local_EAX_1643->m_normal.x = 0.f;
-                            local_EAX_1643->m_normal.y = 0.f;
-                            local_EAX_1643->m_normal.z = 1.f;
+                            dl->m_normal.x = 0.f;
+                            dl->m_normal.y = 0.f;
+                            dl->m_normal.z = 1.f;
                         }
                     }
                     else {
@@ -1953,41 +1936,41 @@ void CreateDirectLights()
                                         goto LAB_0040887d;
                                     vec3_t pt;
                                     GetVectorForKey(ent, "_spotpoint", pt);
-                                    VectorSubtract(pt, local_EAX_1643->m_origin, local_EAX_1643->m_normal);
+                                    VectorSubtract(pt, dl->m_origin, dl->m_normal);
                                 }
                                 else {
-                                    GetVectorForKey(ent, "_spotvector", local_EAX_1643->m_normal);
+                                    GetVectorForKey(ent, "_spotvector", dl->m_normal);
                                 }
-                                VectorNormalize(local_EAX_1643->m_normal, local_EAX_1643->m_normal);
+                                VectorNormalize(dl->m_normal, dl->m_normal);
                             }
                             else {
                                 float yaw = 0.f, pitch = 0.f;
                                 sscanf(mangle_value, "%f %f", &yaw, &pitch);
                                 fVar21 = cos(pitch * Q_PI / 180);
-                                local_EAX_1643->m_normal.x = fVar21 * cos(yaw * Q_PI / 180);
-                                local_EAX_1643->m_normal.y = fVar21 * sin(yaw * Q_PI / 180);
-                                local_EAX_1643->m_normal.z = sin(pitch * Q_PI / 180);
-                                VectorNormalize(local_EAX_1643->m_normal, local_EAX_1643->m_normal);
+                                dl->m_normal.x = fVar21 * cos(yaw * Q_PI / 180);
+                                dl->m_normal.y = fVar21 * sin(yaw * Q_PI / 180);
+                                dl->m_normal.z = sin(pitch * Q_PI / 180);
+                                VectorNormalize(dl->m_normal, dl->m_normal);
                             }
                         }
                         else {
                             ent_00 = FindEntityTarget(targetname, nullptr);
                             if (!ent_00) {
-                                printf("WARNING: light at (%i %i %i) has missing target\n", (int)local_EAX_1643->m_origin.x, (int)local_EAX_1643->m_origin.y, (int)local_EAX_1643->m_origin.z);
-                                local_EAX_1643->m_normal.x = 1;
-                                local_EAX_1643->m_normal.y = 0;
-                                local_EAX_1643->m_normal.z = 0;
+                                printf("WARNING: light at (%i %i %i) has missing target\n", (int)dl->m_origin.x, (int)dl->m_origin.y, (int)dl->m_origin.z);
+                                dl->m_normal.x = 1;
+                                dl->m_normal.y = 0;
+                                dl->m_normal.z = 0;
                             }
                             else {
                                 vec3_t origin;
                                 GetVectorForKey(ent_00, "origin", origin);
-                                VectorSubtract(origin, local_EAX_1643->m_origin, local_EAX_1643->m_normal);
-                                VectorNormalize(local_EAX_1643->m_normal, local_EAX_1643->m_normal);
+                                VectorSubtract(origin, dl->m_origin, dl->m_normal);
+                                VectorNormalize(dl->m_normal, dl->m_normal);
 
                                 for (int i = 0; i < 9; i++) {
                                     if (the_9_suns[i].bool_maybe_sun_is_active != 0) {
                                         if (!strcmp(targetname, the_9_suns[i].target)) {
-                                            VectorCopy(local_EAX_1643->m_normal, the_9_suns[i].direction);
+                                            VectorCopy(dl->m_normal, the_9_suns[i].direction);
                                         }
                                     }
                                 }
@@ -2002,80 +1985,83 @@ void CreateDirectLights()
 
                     i--;
 
-                    if (local_EAX_1643->m_normal.x != 0.f || local_EAX_1643->m_normal.y != 0.f || local_EAX_1643->m_normal.z != 0.f) {
-                        VectorCopy(local_EAX_1643->m_normal, the_9_suns[i].direction);
+                    if (dl->m_normal.x != 0.f || dl->m_normal.y != 0.f || dl->m_normal.z != 0.f) {
+                        VectorCopy(dl->m_normal, the_9_suns[i].direction);
                     }
-                    VectorCopy(local_EAX_1643->m_color, the_9_suns[i].color);
-                    the_9_suns[i].light = (double)local_EAX_1643->m_intensity;
-                    the_9_suns[i].style = local_EAX_1643->m_style;
+                    VectorCopy(dl->m_color, the_9_suns[i].color);
+                    the_9_suns[i].light = dl->m_intensity;
+                    the_9_suns[i].style = dl->m_style;
                     the_9_suns[i].diffuse = FloatForKey(ent, "_diffuse");
                     the_9_suns[i].diffade = FloatForKey(ent, "_diffade");
                     if (the_9_suns[i].diffade == 0) {
-                        the_9_suns[i].diffade = (double)local_EAX_1643->m_distance;
+                        the_9_suns[i].diffade = dl->m_distance;
                     }
                     the_9_suns[i].bool_maybe_sun_is_active = 1;
                 }
-                num_entity_lights += 1;
+                num_entity_lights++;
             }
             j += 1;
         } while (j < num_entities);
     }
-    j = 0;
-    if (num_patches != 0) {
-        do {
-            bool any_sun = false;
-            if ((patches[j].cluster != -1) && (((patches[j].totallight.x < 1 || patches[j].totallight.y < 1) || patches[j].totallight.z < 1))) {
-                numdlights += 1;
-                dl = (directlight_t *)malloc(sizeof(directlight_t));
-                if (!dl) {
-                    Error("CreateDirectLights: (surfaces) malloc failed");
-                }
-                *dl = {};
 
-                dl->m_face = dfaces + patches[j].facenum;
-                (dl->m_origin).x = patches[j].origin.x;
-                (dl->m_origin).y = patches[j].origin.y;
-                (dl->m_origin).z = patches[j].origin.z;
-                dl->m_next = directlights[patches[j].cluster];
-                directlights[patches[j].cluster] = dl;
+    for (j = 0; j < num_patches; j++)
+    {
+        patch_t* patch = &patches[j];
+        if (patch->cluster == -1) {
+            continue;
+        }
+        if (abs(patch->totallight.x) < 1 && abs(patch->totallight.y) < 1 && abs(patch->totallight.z) < 1) {
+            continue;
+        }
 
-                for (int u = 0; u < 9; u++) {
-                    any_sun |= the_9_suns[u].bool_maybe_sun_is_active;
-                }
+        numdlights++;
 
-                if ( ((texinfo[dl->m_face->texinfo].flags & SURF_SKY) == 0) ||
-                    ((!any_sun && (g_sky_ambient == 0)) && (g_sky_surface == 0))) {
-                    dl->m_emittype = 0;
-                }
-                else {
-                    dl->m_emittype = 3;
-                }
-                vec3_t mins, maxs;
-                GetFaceBounds(patches[j].facenum, mins, maxs);
-                dl->m_choplight = 0.00000000;
-                for (iVar11 = 0; iVar11 < 3; iVar11++) {
-                    fVar23 = maxs.data[iVar11] - mins.data[iVar11];
-                    if (fVar23 > dl->m_choplight) {
-                        dl->m_choplight = fVar23;
-                    }
-                }
-                if (dl->m_choplight > choplight) {
-                    dl->m_choplight = choplight;
-                }
-                VectorCopy(patches[j].plane->normal, dl->m_normal);
-                dl->m_focus = patches[j].focus;
-                dl->m_style = patches[j].styletable;
-                dl->m_distance = patches[j].distance;
-                dl->m_bounce = 1;
-                dl->m_intensity = direct_scale * patches[j].area * ColorNormalize(patches[j].totallight, dl->m_color);
-                VectorClear(patches[j].totallight);
-                if ((g_sky_surface != 0.f) && !any_sun && (vec3_t_021d98a0.x == 0) && (vec3_t_021d98a0.y == 0) && (vec3_t_021d98a0.z == 0)) {
-                    VectorCopy(dl->m_color, vec3_t_021d98a0);
-                }
-                num_surface_lights++;
+        dl = (directlight_t *)malloc(sizeof(directlight_t));
+        if (!dl) {
+            Error("CreateDirectLights: (surfaces) malloc failed");
+        }
+        *dl = {};
+
+        dl->m_face = dfaces + patch->facenum;
+        VectorCopy(patch->origin, dl->m_origin);
+        dl->m_next = directlights[patch->cluster];
+        directlights[patch->cluster] = dl;
+
+        bool any_sun = false;
+        for (int u = 0; u < 9; u++) {
+            any_sun |= the_9_suns[u].bool_maybe_sun_is_active;
+        }
+
+        if ( ((texinfo[dl->m_face->texinfo].flags & SURF_SKY) == 0) ||
+            ((!any_sun && (g_sky_ambient == 0)) && (g_sky_surface == 0))) {
+            dl->m_emittype = emit_surface;
+        }
+        else {
+            dl->m_emittype = emit_UNKNOWN;
+        }
+        vec3_t mins, maxs;
+        GetFaceBounds(patch->facenum, mins, maxs);
+        dl->m_choplight = 0;
+        for (iVar11 = 0; iVar11 < 3; iVar11++) {
+            fVar23 = maxs.data[iVar11] - mins.data[iVar11];
+            if (fVar23 > dl->m_choplight) {
+                dl->m_choplight = fVar23;
             }
-            j += 1;
-        } while (j < num_patches);
+        }
+        if (dl->m_choplight > choplight) {
+            dl->m_choplight = choplight;
+        }
+        VectorCopy(patch->plane->normal, dl->m_normal);
+        dl->m_focus = patch->focus;
+        dl->m_style = patch->styletable;
+        dl->m_distance = patch->distance;
+        dl->m_bounce = 1;
+        dl->m_intensity = direct_scale * patch->area * ColorNormalize(patch->totallight, dl->m_color);
+        VectorClear(patch->totallight);
+        if ((g_sky_surface != 0.f) && !any_sun && (vec3_t_021d98a0.x == 0) && (vec3_t_021d98a0.y == 0) && (vec3_t_021d98a0.z == 0)) {
+            VectorCopy(dl->m_color, vec3_t_021d98a0);
+        }
+        num_surface_lights++;
     }
     qprintf("%i direct lights:  %i entity, %i surface\n", numdlights, num_entity_lights, num_surface_lights);
 }
@@ -2147,7 +2133,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                 continue;	// behind sample surface
             */
             VectorSubtract(l->m_origin, realpt, delta);
-            if (l->m_emittype == 0 || l->m_emittype == 3)
+            if (l->m_emittype == emit_surface || l->m_emittype == emit_UNKNOWN)
                 VectorSubtract(delta, l->m_normal, delta);
             dist = VectorNormalize(delta, delta);
             dot = DotProduct(delta, normal);
@@ -2490,6 +2476,14 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                 local_21a8 = l->m_cap;
             }
 
+            if (!styletable[l->m_style]) {
+                styletable[l->m_style] = (vec3_t*)malloc(mapsize);
+                if (!styletable[l->m_style]) {
+                    Error("GatherSampleLight: (light) malloc failed");
+                }
+                memset(styletable[l->m_style], 0, mapsize);
+            }
+
             vec3_t* ofs = styletable[l->m_style] + offset;
 
             vec3_t local_2184;
@@ -2698,12 +2692,14 @@ void RadWorld()
     if (numbounce > 0) {
         // build transfer lists
         RunThreadsOn(num_patches, true, MakeTransfers);
-        qprintf("transfer lists: %5.1f megs\n");
+        qprintf("transfer lists: %5.1f megs\n", (float)total_transfer * sizeof(transfer_t) / (1024 * 1024));
         FreeTnodes();
 
         // spread light around
         BounceLight();
+
         FreeTransfers();
+
         //CheckPatches();
     }
     if (glview != 0) {

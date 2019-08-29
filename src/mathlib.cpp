@@ -30,7 +30,6 @@ vec3_t vec3_origin = { 0,0,0 };
 
 float VectorLength(vec3_t v)
 {
-    int		i;
     double	length;
 
     length = v.x*v.x + v.y*v.y + v.z*v.z;
@@ -56,9 +55,9 @@ vec_t Q_rint(vec_t in)
 
 void VectorMA(const vec3_t& ofs, double scale, const vec3_t& val, vec3_t& out)
 {
-    out.x = val.x * (float)scale + ofs.x;
-    out.y = val.y * (float)scale + ofs.y;
-    out.z = val.z * (float)scale + ofs.z;
+    out.x = val.x * scale + ofs.x;
+    out.y = val.y * scale + ofs.y;
+    out.z = val.z * scale + ofs.z;
 }
 
 void CrossProduct(vec3_t v1, vec3_t v2, vec3_t& cross)

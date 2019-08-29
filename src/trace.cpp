@@ -277,19 +277,12 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
 {
     float fVar1;
     float fVar2;
-    float fVar3;
-    float fVar6;
-    float fVar7;
     vec3_t color;
     vec3_t local_48;
     vec3_t local_3c;
     vec3_t tmp, tmp2, tmp3;
-    float local_30;
-    float local_2c;
     float local_24;
     float local_20;
-    float local_10;
-    float local_c;
 
     if ((shfunk->maxs.x <= mins.x) || (shfunk->maxs.y <= mins.y) || (shfunk->maxs.z <= mins.z) ||
         (shfunk->mins.x >= maxs.x) || (shfunk->mins.y >= maxs.y) || (shfunk->mins.z >= maxs.z)) {
@@ -332,54 +325,14 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
         }
         VectorSubtract(start, local_48, tmp2);
         VectorSubtract(stop, local_48, tmp3);
+
         tmp.x = tmp.x - local_48.x;
         local_24 = tmp2.y * (tmp.z - local_48.z) - (tmp.y - local_48.y) * tmp2.z;
         local_20 = tmp.x * tmp2.z - (tmp.z - local_48.z) * tmp2.x;
         tmp.y = (tmp.y - local_48.y) * tmp2.x - tmp.x * tmp2.y;
         fVar2 = local_24 * tmp3.x + local_20 * tmp3.y + tmp3.z * tmp.y;
 
-        /*
-                             ------- if ---------
-                             ST1 => fVar1
-                             ST0 => fVar2
-        00403f88 060           d8 15 cc        FCOM       dword ptr [FLOAT_ZERO]                           = 0.0
-                               71 43 00
-        00403f8e 060           df e0           FNSTSW     AX
-        00403f90 060           25 00 41        AND        EAX,0x4100
-                               00 00
-                             jump taken = break
-        00403f95 060           74 56           JZ         LAB_00403fed
-        00403f97 060           d8 1d cc        FCOMP      dword ptr [FLOAT_ZERO]                           = 0.0
-                               71 43 00
-        00403f9d 060           df e0           FNSTSW     AX
-        00403f9f 060           f6 c4 44        TEST       AH,0x44
-                             jump taken = continue
-        00403fa2 060           7a 31           JP         LAB_00403fd5
-        00403fa4 060           d9 44 24 40     FLD        dword ptr [ESP + local_20]
-        00403fa8 060           d8 0d c8        FMUL       dword ptr [FLOAT_004371c8]                       = 0.7419
-                               71 43 00
-        00403fae 060           d9 44 24 3c     FLD        dword ptr [ESP + local_24]
-        00403fb2 060           d8 0d c4        FMUL       dword ptr [FLOAT_004371c4]                       = 0.5416
-                               71 43 00
-        00403fb8 060           de c1           FADDP
-        00403fba 060           d9 c9           FXCH
-        00403fbc 060           d8 0d c0        FMUL       dword ptr [FLOAT_004371c0]                       = 0.3953
-                               71 43 00
-        00403fc2 060           de e9           FSUBP
-        00403fc4 060           d8 1d cc        FCOMP      dword ptr [FLOAT_ZERO]                           = 0.0
-                               71 43 00
-        00403fca 060           df e0           FNSTSW     AX
-        00403fcc 060           25 00 01        AND        EAX,0x100
-                               00 00
-                             ------- if body: jump taken = break -------
-        00403fd1 060           74 1e           JZ         LAB_00403ff1
-                             continue...
-        00403fd3 060           eb 02           JMP        LAB_00403fd7
-
-        */
-
-        // TODO BUG - fVar2 <= 0 prevents fVar2 == 0 ...
-        if (fVar2 <= 0 || (fVar2 == 0 && (0 <= (local_24 * 0.54159999 + local_20 * 0.74190003) - tmp.y * 0.39530000))) {
+        if (fVar2 > 0 || (fVar2 == 0 && (0 <= (local_24 * 0.54159999 + local_20 * 0.74190003) - tmp.y * 0.39530000))) {
             break;
         }
     }
@@ -463,9 +416,7 @@ int TestLine_shadowmodel(const vec3_t& start, const vec3_t& stop, vec3_t* out_ve
 
     AddPointToBounds(stop, mins, maxs);
     AddPointToBounds(start, mins, maxs);
-    local_c.x = stop.x - start.x;
-    local_c.y = stop.y - start.y;
-    local_c.z = stop.z - start.z;
+    VectorSubtract(stop, start, local_c);
 
     for (shmod = g_shadow_world; shmod; shmod = shmod->next)
     {
@@ -481,6 +432,7 @@ int TestLine_shadowmodel(const vec3_t& start, const vec3_t& stop, vec3_t* out_ve
             }
         }
     }
+    return 0;
 }
 
 int TestLine_shadow(const vec3_t& start, const vec3_t& stop, vec3_t *out_param_3, vec3_t *optional_out_vec)
@@ -497,14 +449,10 @@ int TestLine_shadow(const vec3_t& start, const vec3_t& stop, vec3_t *out_param_3
         }
     }
     else {
-        local_c.z = 0;
-        local_c.y = 0;
-        local_c.x = 0;
+        VectorClear(local_c);
     }
     if (optional_out_vec) {
-        optional_out_vec->x = local_c.x;
-        optional_out_vec->y = local_c.y;
-        optional_out_vec->z = local_c.z;
+        VectorCopy(local_c, (*optional_out_vec));
     }
     return result;
 }
