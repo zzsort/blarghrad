@@ -381,7 +381,7 @@ typedef struct
 #define	SURF_HINT		0x100	// make a primary bsp splitter
 #define	SURF_SKIP		0x200	// completely ignore, allowing non-closed brushes
 
-#define SURF_CURVE 0x80000000 // TODO - related to phong
+#define SURF_CURVE 0x80000000
 
 
 // heretic2 flags found here: https://github.com/xonotic/netradiant/blob/master/tools/heretic2/common/qfiles.h
@@ -419,7 +419,9 @@ typedef struct texinfo_s
 	char		texture[32];	// texture name (textures/*.wal)
 	int			nexttexinfo;	// for animations, -1 = end of chain
 } texinfo_t;
-
+#ifdef _M_IX86
+static_assert(sizeof(texinfo_t)==76, "");
+#endif
 
 // note that edge 0 is never used, because negative edge nums are used for
 // counterclockwise use of the edge in a face

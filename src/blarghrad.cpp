@@ -60,7 +60,7 @@ pak_t* moddir_paks = nullptr;
 
 vec3_t texture_reflectivity[MAX_MAP_TEXINFO];
 
-byte* TODO_malloc_palsize_768; // TODO RENAME - maybe: colormap
+byte* palette; // 768 bytes
 
 shadowmodel_t* g_shadow_world;
 projtexture_t* g_proj_textures;
@@ -274,6 +274,7 @@ void SetTextureReflectivity(int txnum)
             texture_reflectivity[txnum].z *= maxrgb * 2;
         }
     }
+    CHKVAL("STR", texture_reflectivity[txnum]);
 }
 
 void PrintTextureReflectivity(int txnum)
@@ -518,18 +519,18 @@ int CalcTextureReflectivity(int txnum)
     char path[1024];
     miptex_t* malloc_bytes;
 
-    if (!TODO_malloc_palsize_768) {
-        TODO_malloc_palsize_768 = (byte*)malloc(768);
-        if (!TODO_malloc_palsize_768) {
+    if (!palette) {
+        palette = (byte*)malloc(768);
+        if (!palette) {
             Error("CalcTextureReflectivity: malloc failed");
         }
         sprintf(path, "pics/colormap.pcx");
         if (!LoadPakFile(path, (void**)&malloc_bytes)) {
             printf("WARNING: Colormap not found - no colored texture lighting\n");
-            memset(TODO_malloc_palsize_768, 0xFF, 768);
+            memset(palette, 0xFF, 768);
         }
         else {
-            memcpy(TODO_malloc_palsize_768, malloc_bytes, 768);
+            memcpy(palette, malloc_bytes, 768);
             free(malloc_bytes);
         }
     }
@@ -554,7 +555,7 @@ int CalcTextureReflectivity(int txnum)
         }
         else {
             for (int i = 0; i < 3; i++) {
-                byte chan = TODO_malloc_palsize_768[color * 3 + i];
+                byte chan = palette[color * 3 + i];
                 rgbsum[i] += chan;
                 if (projtex) {
                     projtex->texture32[i * 4 + i] = chan;
@@ -740,7 +741,7 @@ CollectLight
 */
 float CollectLight(void)
 {
-    float total = 0;
+    double total = 0;
 
     patch_t	*patch = patches;
     for (int i = 0; i < num_patches; i++, patch++)
@@ -764,6 +765,8 @@ float CollectLight(void)
 
         total += radiosity[i].x + radiosity[i].y + radiosity[i].z;
         VectorClear(illumination[i]);
+
+        //CHKVAL("CollectLight-total", total);
     }
 
     return total;
@@ -794,13 +797,15 @@ void ShootLight(int patchnum)
         send.data[k] = radiosity[patchnum].data[k] / 0x10000;
     patch = &patches[patchnum];
 
+    //CHKVAL("ShootLight-send", send);
+
     trans = patch->transfers;
     num = patch->numtransfers;
 
     for (k = 0; k < num; k++, trans++)
     {
         for (l = 0; l < 3; l++)
-            illumination[trans->patch].data[l] += send.data[l] * trans->transfer;
+            illumination[trans->patch].data[l] += send.data[l] * trans->transfer * trans->transfer / 0x10000;
     }
 }
 
@@ -961,15 +966,15 @@ void MakeTransfers(int i)
             continue;	// should never happen
 
         // relative angles
-        float p1_scale = DotProduct(delta, patch->field_0x6c);
+        float p1_scale = DotProduct(delta, patch->normal);
         if (bouncefix) {
             if (p1_scale < 0.f) {
                 continue;
             }
         }
-        float p2_scale = -DotProduct(delta, patch2->field_0x6c);  // TODO - field_0x6c comes from maybePhongSomething. this value is takes the place of patch2->plane->normal, so it is probably related to a plane normal.
+        float p2_scale = -DotProduct(delta, patch2->normal);
         float scale = p2_scale * p1_scale;
-        if (scale == 0)
+        if (scale <= 0)
             continue;
 
         if (splotchfix && dist < splotch_dist) {
@@ -1037,7 +1042,7 @@ void MakeTransfers(int i)
         }
     }
 
-    // don't bother locking around this.  not that important.
+    // counting across threads
     total_transfer += patch->numtransfers;
 }
 
@@ -1099,6 +1104,7 @@ void BuildFaceGroups()
             uVar1 = facenum + 1;
             if ((int)uVar1 < numfaces) {
                 unsigned int uVar9 = uVar1;
+                CHKVAL("BFG-start2", (int)uVar9);
                 dface_t* nextface = dfaces + i + 1;
                 int j = i;
                 do {
@@ -1109,6 +1115,7 @@ void BuildFaceGroups()
                                     goto LAB_0040588f;
                             LAB_0040589d:
                                 unsigned short start = facegroups[i].start;
+                                CHKVAL("BFG-start1", start);
                                 unsigned int end = start;
                                 while (end != facenum) {
                                     if (end == uVar9) {
@@ -1116,9 +1123,11 @@ void BuildFaceGroups()
                                             goto LAB_00405905;
                                         break;
                                     }
-                                    end = facegroups[end].end;
+                                    end = facegroups[end].start;
+                                    CHKVAL("BFG-findend", (int)end);
                                 }
                                 unsigned short uVar3 = facegroups[j + 1].end;
+                                CHKVAL("BFG-endval", uVar3);
                                 facegroups[i].start = (unsigned short)uVar9;
                                 facegroups[j + 1].end = (unsigned short)facenum;
                                 facegroups[start].end = uVar3;
@@ -1272,6 +1281,8 @@ void BuildFacelights(int facenum)
     }
 
     tablesize = l[0].numsurfpt * sizeof(vec3_t);
+    CHKVAL("BuildFaceLights-tablesize", tablesize);
+
     styletable[0] = (vec3_t*)malloc(tablesize);
     if (!styletable[0]) {
         Error("BuildFaceLights: (styletable[0]) malloc failed");
@@ -1286,7 +1297,7 @@ void BuildFacelights(int facenum)
 
     fl = &facelight[facenum];
     fl->numsamples = l[0].numsurfpt;
-    fl->origins = (float*)malloc(tablesize);
+    fl->origins = (vec3_t*)malloc(tablesize);
     if (!fl->origins) {
         Error("BuildFaceLights: (origins) malloc failed");
     }
@@ -1298,10 +1309,9 @@ void BuildFacelights(int facenum)
         for (j = 0; j < numsamples; j++)
         {
             vec3_t facenormal;
-
             maybePhongSomething(facenum, l[j].realpt[i], l[0].facenormal, /*out*/facenormal);
 
-            GatherSampleLight(l[j].surfpt[i], l[j].realpt[i], facenormal, styletable, bouncelight, i, tablesize, 1.f / numsamples);
+            GatherSampleLight(l[j].surfpt[i], l[j].realpt[i], facenormal, styletable, bouncelight, i, tablesize, 1.0 / numsamples);
         }
 
         // contribute the sample to one or more patches
@@ -1371,7 +1381,7 @@ void BuildFacelights(int facenum)
             continue;
         if (fl->numstyles == MAX_STYLES)
             break;
-        fl->samples[fl->numstyles] = (float*) styletable[i]; // TODO FIX CAST
+        fl->samples[fl->numstyles] = styletable[i];
         fl->stylenums[fl->numstyles] = i;
         fl->numstyles++;
     }
@@ -1431,10 +1441,14 @@ void maybeInitPhong()
                 else {
                     v = dedges[edge].v[0];
                 }
+                CHKVAL("maybeInitPhong-bbb", dvertexes[v].point);
                 VectorAdd(local_44, dvertexes[v].point, local_44);
             }
-            float scale = 1 / (float)face->numedges;
+
+            double scale = 1.0 / face->numedges;
             VectorScale(local_44, scale, local_44);
+
+            CHKVAL("maybeInitPhong-aaa", local_44);
             if (face->side == 0) {
                 val = &dplanes[face->planenum];
             }
@@ -1474,23 +1488,23 @@ void maybeInitPhong()
                 puVar10 = g_maybe_vertex_phong[v];
                 while (puVar10) {
                     if ((puVar10->txLightValue == txLightValue) &&
-                        (puVar10->face_bool == (bool)g_hashset_face[k])) 
+                        (puVar10->liquid_contents == g_hashset_face[k]))
                         goto LAB_0040eb71;
                     puVar10 = puVar10->next;
                 }
                 puVar10 = (unknownunk_t *)malloc(sizeof(unknownunk_t));
                 puVar10->txLightValue = txLightValue;
-                puVar10->face_bool = g_hashset_face[k];
+                puVar10->liquid_contents = g_hashset_face[k];
                 VectorClear(puVar10->normal);
                 puVar10->next = g_maybe_vertex_phong[v];
                 g_maybe_vertex_phong[v] = puVar10;
 
-                // TODO - debug original to determine starting value
+                // original does not initialize this value
                 local_60 = 0;
 
             LAB_0040eb71:
                 if (weightcurve == 0) {
-                    local_60 = 1.f;
+                    local_60 = 1;
                 }
                 else {
                     int edge2 = dsurfedges[face->firstedge];
@@ -1521,14 +1535,13 @@ void maybeInitPhong()
                         VectorSubtract(vert, local_50, a);
                         CrossProduct(d, a, local_2c);
 
-                        // TODO REVIEW - original code does not appear to initialize local_60
                         local_60 += VectorLength(local_2c) * 0.5f;
                     }
 
                     if (local_60 < 1)
                         local_60 = 1;
-
-                    local_60 = 1 / sqrt(local_60);
+                    else
+                        local_60 = 1 / sqrt(local_60);
                 }
                 val = backplanes;
                 if (face->side == 0) {
@@ -1695,7 +1708,7 @@ void CreateDirectLights()
 
                     sprintf(local_28, "%s_color", key_prefix);
                     GetVectorForKey(ent, local_28, the_9_suns[i].color);
-                    if ((the_9_suns[i].color.x == 0) || (the_9_suns[i].color.y == 0) || (the_9_suns[i].color.z == 0)) {
+                    if (the_9_suns[i].color.x || the_9_suns[i].color.y || the_9_suns[i].color.z) {
                         VectorNormalize(the_9_suns[i].color, the_9_suns[i].color);
                         the_9_suns[i].bool_maybe_sun_is_active = 1;
                     }
@@ -1727,7 +1740,7 @@ void CreateDirectLights()
                             goto LAB_00407f20;
                         sprintf(local_28, "%s_vector", key_prefix);
                         GetVectorForKey(ent, local_28, the_9_suns[i].direction);
-                        if ((the_9_suns[i].direction.x == 0) || (the_9_suns[i].direction.y == 0) || (the_9_suns[i].direction.z == 0)) {
+                        if (the_9_suns[i].direction.x || the_9_suns[i].direction.y || the_9_suns[i].direction.z) {
                             VectorNormalize(the_9_suns[i].direction, the_9_suns[i].direction);
                             goto LAB_00407fd9;
                         }
@@ -2037,7 +2050,7 @@ void CreateDirectLights()
             dl->m_emittype = emit_surface;
         }
         else {
-            dl->m_emittype = emit_UNKNOWN;
+            dl->m_emittype = emit_sunlight;
         }
         vec3_t mins, maxs;
         GetFaceBounds(patch->facenum, mins, maxs);
@@ -2082,8 +2095,12 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
     vec3_t			delta;
     float			dot, dot2;
     float			dist;
-    float			scale;
     float			*dest;
+
+    CHKVAL("GatherSampleLight-pos", pos);
+    CHKVAL("GatherSampleLight-realpt", realpt);
+    CHKVAL("GatherSampleLight-normal", normal);
+    CHKVAL("GatherSampleLight-bouncelight", bouncelight[offset]);
 
     // sun related
     int local_212c[9] = {};
@@ -2094,11 +2111,10 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
 
     vec3_t local_2078[9];
     for (i = 0; i < 9; i++) {
-        local_2078[i].x = local_2078[i].y = local_2078[i].z = 1.f;
+        local_2078[i] = {1, 1, 1};
     }
 
-    vec3_t local_216c;
-    local_216c.x = local_216c.y = local_216c.z = 1.f;
+    vec3_t local_216c = { 1, 1, 1 };
 
     float local_2158 = 0;
     directlight_t* local_215c = nullptr;
@@ -2123,17 +2139,10 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
         if (!(pvs[i >> 3] & (1 << (i & 7))))
             continue;
 
-
         for (l = directlights[i]; l; l = l->m_next)
         {
-        /*  VectorSubtract(l->origin, pos, delta);
-            dist = VectorNormalize(delta, delta);
-            dot = DotProduct(delta, normal);
-            if (dot <= 0.001)
-                continue;	// behind sample surface
-            */
             VectorSubtract(l->m_origin, realpt, delta);
-            if (l->m_emittype == emit_surface || l->m_emittype == emit_UNKNOWN)
+            if (l->m_emittype == emit_surface || l->m_emittype == emit_sunlight)
                 VectorSubtract(delta, l->m_normal, delta);
             dist = VectorNormalize(delta, delta);
             dot = DotProduct(delta, normal);
@@ -2141,12 +2150,8 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                 continue; // behind sample surface
 
             bool bVar6 = false;
-
-            float local_21a8; // TODO RENAME scale
+            float scale;
             
-            // local_21b0 => dist
-
-
             switch (l->m_emittype)
             {
                 case emit_point: // case 1
@@ -2175,31 +2180,24 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
 
                         if (l->m_falloff == 0) {
                             if (l->m_intensity >= 0) {
-                                local_21a8 = (l->m_intensity - dist) * dot;
+                                scale = (l->m_intensity - dist) * dot;
                             }
                             else {
-                                local_21a8 = (dist + l->m_intensity) * dot;
+                                scale = (dist + l->m_intensity) * dot;
                             }
                         }
                         else {
                             if (l->m_falloff == 1) {
-                                local_21a8 = l->m_intensity / dist * dot;
+                                scale = l->m_intensity / dist * dot;
                             }
                             else {
-                                local_21a8 = l->m_intensity / (dist * dist) * dot;
+                                scale = l->m_intensity / (dist * dist) * dot;
                             }
                         }
                     }
                     break;
 
                 case emit_surface: // case 0
-                    /* original:
-                    dot2 = -DotProduct(delta, l->normal);
-                    if (dot2 <= 0.001)
-                        goto skipadd;	// behind light surface
-                    scale = (l->intensity / (dist*dist)) * dot * dot2;
-                    */
-
                     if ((l->m_distance == 1) || (dist <= l->m_distance)) {
                         float local_2198_new = 0;
                         dot2 = -DotProduct(delta, l->m_normal);
@@ -2211,9 +2209,9 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                             if (dist >= l->m_choplight) {
                                 continue;
                             }
-                            delta.x = (l->m_origin.x - pos.x) - (l->m_normal).x;
-                            delta.y = (l->m_origin.y - pos.y) - (l->m_normal).y;
-                            delta.z = (l->m_origin.z - pos.z) - (l->m_normal).z;
+                            delta.x = (l->m_origin.x - pos.x) - l->m_normal.x;
+                            delta.y = (l->m_origin.y - pos.y) - l->m_normal.y;
+                            delta.z = (l->m_origin.z - pos.z) - l->m_normal.z;
                             dist = VectorNormalize(delta, delta);
                             dot2 = -DotProduct(delta, l->m_normal);
                             if (dot2 < 0) {
@@ -2257,18 +2255,12 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                             dot2 = dot2 * l->m_focus + (1 - l->m_focus);
                         }
 
-                        local_21a8 = (l->m_intensity / (dist * dist)) * dot2 * dot;
+                        scale = (l->m_intensity / (dist * dist)) * dot2 * dot;
+                        CHKVAL("GatherSampleLight-surface", scale);
                     }
                     break;
                 case emit_spotlight: // case 2
                     {
-                        // linear falloff
-                        /*original:
-                        dot2 = -DotProduct(delta, l->normal);
-                        if (dot2 <= l->stopdot)
-                            goto skipadd;	// outside light cone
-                        scale = (l->intensity - dist) * dot;
-                        */
                         if (l->m_falloff == 0) {
                             if (l->m_distance != 1) {
                                 dist *= l->m_distance;
@@ -2300,21 +2292,21 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                         }
                         if (l->m_falloff == 0) {
                             if (l->m_intensity >= 0) {
-                                local_21a8 = (l->m_intensity - dist) * fVar3 * dot;
+                                scale = (l->m_intensity - dist) * fVar3 * dot;
                             }
                             else {
-                                local_21a8 = (dist + l->m_intensity) * fVar3 * dot;
+                                scale = (dist + l->m_intensity) * fVar3 * dot;
                             }
                         }
                         else if (l->m_falloff == 1) {
-                            local_21a8 = (l->m_intensity / dist) * fVar3 * dot;
+                            scale = (l->m_intensity / dist) * fVar3 * dot;
                         }
                         else {
-                            local_21a8 = (l->m_intensity / (dist * dist)) * fVar3 * dot;
+                            scale = (l->m_intensity / (dist * dist)) * fVar3 * dot;
                         }
                     }
                     break;
-                case emit_UNKNOWN: // case 3
+                case emit_sunlight: // case 3
                     {
                         float fVar3 = -DotProduct(delta, l->m_normal);
                         if (fVar3 < 0) {
@@ -2353,16 +2345,16 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                                 dist = l->m_choplight;
                             }
                             if (g_sky_surface <= 1) {
-                                local_21a8 = l->m_intensity / (dist * dist) * fVar3 * dot;
+                                scale = l->m_intensity / (dist * dist) * fVar3 * dot;
                             }
                             else {
-                                local_21a8 = (((g_sky_surface * l->m_intensity) /
+                                scale = (((g_sky_surface * l->m_intensity) /
                                     (float)texinfo[l->m_face->texinfo].value) /
                                     (dist * dist)) * fVar3 * dot;
                             }
                         }
                         else {
-                            local_21a8 = 0;
+                            scale = 0;
                         }
 
                         for (i = 0; i < 9; i++) {
@@ -2458,11 +2450,11 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
             }
 
             if (l->m_style != 0) {
-                if (stylemin > abs(local_21a8)) {
+                if (stylemin > abs(scale)) {
                     continue;
                 }
             }
-            else if (local_21a8 == 0) {
+            else if (scale == 0) {
                 continue;
             }
 
@@ -2471,9 +2463,8 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
             if (!bVar6 && TestLine_shadow(l->m_origin, pos, nullptr, &local_216c))
                 continue;	// occluded
 
-            // TODO rename local_21a8 => scale
-            if (l->m_cap != 0 && local_21a8 > l->m_cap) {
-                local_21a8 = l->m_cap;
+            if (l->m_cap != 0 && scale > l->m_cap) {
+                scale = l->m_cap;
             }
 
             if (!styletable[l->m_style]) {
@@ -2487,7 +2478,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
             vec3_t* ofs = styletable[l->m_style] + offset;
 
             vec3_t local_2184;
-            if (l->m_emittype == emit_UNKNOWN) {
+            if (l->m_emittype == emit_sunlight) {
                 if (vec3_t_021d98a0.x || vec3_t_021d98a0.y || vec3_t_021d98a0.z) {
                     VectorCopy(vec3_t_021d98a0, local_2184);
                 }
@@ -2510,7 +2501,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                     local_2184.y *= local_216c.y;
                     local_2184.z *= local_216c.z;
                 }
-                VectorMA(*ofs, (double)(local_21a8 * lightscale), local_2184, *ofs);
+                VectorMA(*ofs, (double)(scale * lightscale), local_2184, *ofs);
             }
             else {
                 if (local_216c.x != 1 || local_216c.y != 1 || local_216c.z != 1) {
@@ -2521,13 +2512,13 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                 else {
                     VectorCopy(l->m_color, local_2184);
                 }
-                VectorMA(*ofs, (double)(local_21a8 * lightscale), local_2184, *ofs);
+                VectorMA(*ofs, (double)(scale * lightscale), local_2184, *ofs);
                 if ((l->m_bounce == 0) || (l->m_style != 0)) 
                     continue;
             }
 
             // add some light to it
-            VectorMA(bouncelight[offset], local_21a8 * lightscale, local_2184, bouncelight[offset]);
+            VectorMA(bouncelight[offset], scale * lightscale, local_2184, bouncelight[offset]);
 
         skipadd:;
         }
@@ -2672,6 +2663,7 @@ void RadWorld()
     if (nocurve == 0) {
         maybeInitPhong();
     }
+
     BuildFaceGroups();
 
     // turn each face into a single patch
@@ -2683,6 +2675,7 @@ void RadWorld()
     // create directlights out of patches and lights
     CreateDirectLights();
 
+
     // build initial facelights
     RunThreadsOn(numfaces, true, BuildFacelights);
     FreeDirectLights();
@@ -2690,6 +2683,7 @@ void RadWorld()
     maybeFreePhong();
 
     if (numbounce > 0) {
+
         // build transfer lists
         RunThreadsOn(num_patches, true, MakeTransfers);
         qprintf("transfer lists: %5.1f megs\n", (float)total_transfer * sizeof(transfer_t) / (1024 * 1024));
@@ -2708,6 +2702,7 @@ void RadWorld()
     FreeProjTextures();
     maybe_free_shadows();
     lightdatasize = 0;
+
     RunThreadsOn(numfaces, true, FinalLightFace);
     free(facegroups);
 }
@@ -2720,6 +2715,11 @@ void UpdateLightmaps(int) {
 
 int main(int argc, char **argv)
 {
+#ifdef ENABLE_VERIFICATION
+    InitVerification();
+    //CHK_DISABLE();
+#endif
+
     const char* usage = "----- Usage -----\n"
         "QRAD.EXE  [-?|-help] [-v] [-dump] [-glview] [-nopvs] [-threads #] [-update]   \n"
         "[-game $] [-gamedir $] [-moddir $] [-bounce #] [-onlybounce] [-lightwarp]     \n"
@@ -2746,19 +2746,15 @@ int main(int argc, char **argv)
         if (subdiv > 256)
             subdiv = 256;
 
-        if (choplight == 0)
+        if (choplight == 0) {
             choplight = subdiv;
-
-        if (chopsky == 0)
             chopsky = subdiv;
-
-        if (chopwarp == 0)
             chopwarp = subdiv;
-
-        if (chopcurve == 0) {
-            chopcurve = std::max(32.f, subdiv);
+            if (subdiv >= 32)
+                chopcurve = 32;
+            else
+                chopcurve = subdiv;
         }
-
 
         if (i != argc - 1) {
             Error(usage);
@@ -2785,7 +2781,7 @@ int main(int argc, char **argv)
         ParseEntities();
         if (!onlyupdate) {
             MakeShadowModels();
-            if (g_texscale <= 0) {
+            if (g_texscale == 0) {
                 g_texscale = (game == 1 ? 2.0f : 1.0f);
             }
             CalcTextureReflectivityMain();

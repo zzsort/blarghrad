@@ -26,7 +26,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "polylib.h"
 #include "blarghrad.h"
 
-#define	ON_EPSILON	0.1
+#define	ON_EPSILON	0.01
 
 typedef struct tnode_s
 {
@@ -53,7 +53,9 @@ void MakeTnode (int nodenum)
 	dplane_t		*plane;
 	int				i;
 	dnode_t 		*node;
-	
+
+    CHKVAL("MakeTnode", nodenum);
+
 	t = tnode_p++;
 
 	node = dnodes + nodenum;
@@ -65,12 +67,14 @@ void MakeTnode (int nodenum)
 	
 	for (i=0 ; i<2 ; i++)
 	{
-		if (node->children[i] < 0)
-			t->children[i] = (dleafs[-node->children[i] - 1].contents & CONTENTS_SOLID) | (1<<31);
+        if (node->children[i] < 0) {
+            t->children[i] = (dleafs[-node->children[i] - 1].contents & CONTENTS_SOLID) | (1 << 31);
+            CHKVAL("MakeTnode-lt0", t->children[i]);
+        }
 		else
 		{
 			t->children[i] = tnode_p - tnodes;
-			MakeTnode (node->children[i]);
+            MakeTnode (node->children[i]);
 		}
 	}
 			
@@ -117,48 +121,78 @@ int TestLine_r (int node, const vec3_t& start, const vec3_t& stop, vec3_t* out_v
 	tnode_t	*tnode;
 	float	front, back;
 	vec3_t	mid;
-	float	frac;
 	int		side;
 	int		r;
 
     if (node & (1 << 31)) {
         if (out_vec) {
             VectorCopy(start, (*out_vec));
+            CHKVAL("TestLine_r-outvec", start);
         }
-        return node & ~(1 << 31);	// leaf node
+        r = node & ~(1 << 31);	// leaf node
+        //CHKVAL("TestLine_r-retleaf", r);
+        return r;
     }
 
 	tnode = &tnodes[node];
+
+    //CHKVAL("TestLine_r-start", start);
+    //CHKVAL("TestLine_r-stop", stop);
+    //CHKVAL("TestLine_r-type", tnode->type);
+    //CHKVAL("TestLine_r-dist", tnode->dist);
+
 	switch (tnode->type)
 	{
 	case PLANE_X:
-		front = start.x - tnode->dist;
-		back = stop.x - tnode->dist;
+        front = start.x;
+        back = stop.x;
 		break;
 	case PLANE_Y:
-		front = start.y - tnode->dist;
-		back = stop.y - tnode->dist;
+        front = start.y;
+        back = stop.y;
 		break;
 	case PLANE_Z:
-		front = start.z - tnode->dist;
-		back = stop.z - tnode->dist;
+        front = start.z;
+        back = stop.z;
 		break;
 	default:
 		front = (start.x*tnode->normal.x + start.y*tnode->normal.y + start.z*tnode->normal.z) - tnode->dist;
 		back = (stop.x*tnode->normal.x + stop.y*tnode->normal.y + stop.z*tnode->normal.z) - tnode->dist;
-		break;
+
+        if (front >= -ON_EPSILON && back >= -ON_EPSILON) {
+            //CHKVAL("TestLine_r-c0", true);
+            return TestLine_r(tnode->children[0], start, stop, out_vec);
+        }
+        if (front <= ON_EPSILON && back <= ON_EPSILON) {
+            //CHKVAL("TestLine_r-c1", true);
+            return TestLine_r(tnode->children[1], start, stop, out_vec);
+        }
+        goto skip_sub_dist; //break;
 	}
 
-	if (front >= -ON_EPSILON && back >= -ON_EPSILON)
+    if (front >= tnode->dist && back >= tnode->dist) {
+        //CHKVAL("TestLine_r-c0", true);
 		return TestLine_r (tnode->children[0], start, stop, out_vec);
-	
-	if (front < ON_EPSILON && back < ON_EPSILON)
+    }
+
+//#ifdef ENABLE_VERIFICATION
+//    // EPSILON PROBLEMS
+//    if ((front - EQUAL_EPSILON) <= tnode->dist && (back - 0.000458) <= tnode->dist) {
+//#else
+    if (front <= tnode->dist && back <= tnode->dist) {
+//#endif
+        //CHKVAL("TestLine_r-c1", true);
 		return TestLine_r (tnode->children[1], start, stop, out_vec);
+    }
+
+    front -= tnode->dist;
+    back -= tnode->dist;
+
+skip_sub_dist:;
 
 	side = front < 0;
-	
-	frac = front / (front-back);
 
+    double frac = front / ((double)front - back);
 	mid.x = start.x + (stop.x - start.x)*frac;
 	mid.y = start.y + (stop.y - start.y)*frac;
 	mid.z = start.z + (stop.z - start.z)*frac;
@@ -284,8 +318,11 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
     float local_24;
     float local_20;
 
+    CHKVAL("TestLine_shadowfunk-length", length);
+
     if ((shfunk->maxs.x <= mins.x) || (shfunk->maxs.y <= mins.y) || (shfunk->maxs.z <= mins.z) ||
         (shfunk->mins.x >= maxs.x) || (shfunk->mins.y >= maxs.y) || (shfunk->mins.z >= maxs.z)) {
+        CHKVAL("TestLine_shadowfunk-ret0", true);
         return 0;
     }
 
@@ -298,11 +335,13 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
         pln = &backplanes[planenum];
     }
     if (0 <= DotProduct(pln->normal, length)) {
+        CHKVAL("TestLine_shadowfunk-ret0", true);
         return 0;
     }
     float dstart = DotProduct(pln->normal, start) - pln->dist;
     float dstop = DotProduct(pln->normal, stop) - pln->dist;
     if (0 <= dstop * dstart) {
+        CHKVAL("TestLine_shadowfunk-ret0", true);
         return 0;
     }
 
@@ -338,6 +377,7 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
     }
 
     if (i != dfaces[shfunk->face].numedges) {
+        CHKVAL("TestLine_shadowfunk-ret0", true);
         return 0;
     }
     fVar1 = dstart / (dstart - dstop);
@@ -392,6 +432,7 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
     out_param_9->y = out_param_9->y * fVar1 + color.y * trans * out_param_9->y;
     out_param_9->z = out_param_9->z * fVar1 + color.z * trans * out_param_9->z;
     if (((out_param_9->x != 0) || (out_param_9->y != 0)) || (out_param_9->z != 0)) {
+        CHKVAL("TestLine_shadowfunk-ret0", true);
         return 0;
     }
 
@@ -399,6 +440,7 @@ LAB_00404265:
     if (out_param_8) {
         VectorCopy(local_3c, (*out_param_8));
     }
+    CHKVAL("TestLine_shadowfunk-ret1", true);
     return 1;
 }
 
@@ -410,6 +452,8 @@ int TestLine_shadowmodel(const vec3_t& start, const vec3_t& stop, vec3_t* out_ve
     vec3_t maxs;
     vec3_t mins;
     vec3_t local_c;
+
+    CHKVAL("TestLine_shadowmodel", true);
 
     mins.x = mins.y = mins.z = 99999.f;
     maxs.x = maxs.y = maxs.z = -99999.f;
@@ -425,23 +469,25 @@ int TestLine_shadowmodel(const vec3_t& start, const vec3_t& stop, vec3_t* out_ve
             ((mins.x < dmodels[n].maxs.x) && (mins.y < dmodels[n].maxs.y) && (mins.z < dmodels[n].maxs.z) &&
             (maxs.x > dmodels[n].mins.x) && (maxs.y < dmodels[n].mins.y) && (maxs.z < dmodels[n].mins.z)))
         {
+            CHKVAL("TestLine_shadowmodel-innerloop", true);
             for (shfunk = shmod->shadownext; shfunk; shfunk = shfunk->next) {
                 if (TestLine_shadowfunk(shfunk, shmod, mins, maxs, local_c, start, stop, out_vec3, out_param_4)) {
+                    CHKVAL("TestLine_shadowmodel-ret-1", true);
                     return -1;
                 }
             }
         }
     }
+    CHKVAL("TestLine_shadowmodel-ret-0", true);
     return 0;
 }
 
 int TestLine_shadow(const vec3_t& start, const vec3_t& stop, vec3_t *out_param_3, vec3_t *optional_out_vec)
 {
-    vec3_t local_c;
+    CHKVAL("TestLine_shadow-start", start);
+    CHKVAL("TestLine_shadow-stop", stop);
 
-    local_c.x = 1;
-    local_c.y = 1;
-    local_c.z = 1;
+    vec3_t local_c = {1, 1, 1};
     int result = TestLine_r(0, start, stop, out_param_3);
     if (result == 0) {
         if (g_shadow_world) {
@@ -452,8 +498,11 @@ int TestLine_shadow(const vec3_t& start, const vec3_t& stop, vec3_t *out_param_3
         VectorClear(local_c);
     }
     if (optional_out_vec) {
+        CHKVAL("TestLine_shadow-outvec", local_c);
         VectorCopy(local_c, (*optional_out_vec));
     }
+
+    CHKVAL("TestLine_shadow-ret", result);
     return result;
 }
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "verify.h"
 
 #pragma warning(disable : 4996)
 
@@ -14,7 +15,7 @@ typedef enum
     emit_surface = 0,
     emit_point = 1,
     emit_spotlight = 2,
-    emit_UNKNOWN = 3,
+    emit_sunlight = 3,
 } emittype_t;
 
 struct pak_t {
@@ -87,10 +88,10 @@ struct facegroup_t {
 
 struct facelight_t {
     int			numsamples;
-    float		*origins;
+    vec3_t		*origins;
     int			numstyles;
     int			stylenums[MAX_STYLES];
-    float		*samples[MAX_STYLES];
+    vec3_t		*samples[MAX_STYLES];
 };
 
 struct lightinfo_t {
@@ -132,7 +133,7 @@ struct patch_t { /* size is 124!! */
     float focus;
     float lightmin;
     int styletable; /* LOCK 104 - prob ptr ary */
-    vec3_t field_0x6c; /* phong? */
+    vec3_t normal;
     int facenum; /* LOCK 120 */
 };
 #ifdef _M_IX86
@@ -141,7 +142,7 @@ static_assert(sizeof(patch_t) == 124, "");
 
 struct unknownunk_t {
     int txLightValue;
-    byte face_bool; // maybe lower surf flags? maybe bool?
+    byte liquid_contents;
     byte UNUSED[3];
     vec3_t normal;
     unknownunk_t* next;

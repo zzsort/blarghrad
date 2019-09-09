@@ -112,7 +112,6 @@ void ExpandWildcards(int *argc, char ***argv)
 #endif
 
 #ifdef WIN_ERROR
-#include <windows.h>
 /*
 =================
 Error

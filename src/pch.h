@@ -18,6 +18,10 @@ typedef unsigned char byte;
 #include <algorithm>
 #include <atomic>
 
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
 class qboolean final {
 public:
     qboolean() = default;

@@ -130,7 +130,7 @@ void maybeGetVertexLightDirection(int vertexnum, int txLightValue, int face, vec
             } else {
                 VectorCopy(dplanes[dfaces[face].planenum].normal, out_normal);
             }
-            return;
+            break;
         }
         /* ArghRad implements Phong shading on a per-surface basis. To use it, give the
            desired surface a light value, but do not set the light flag. This value acts
@@ -138,16 +138,16 @@ void maybeGetVertexLightDirection(int vertexnum, int txLightValue, int face, vec
            lighting with any touching faces that share the same "ID tag" light value.
            Two touching surfaces can belong to two different curves simply by using
            different tag values. */
-        if ((puVar1->txLightValue == txLightValue) && (puVar1->face_bool == g_hashset_face[face]))
+        if ((puVar1->txLightValue == txLightValue) && (puVar1->liquid_contents == g_hashset_face[face])) {
+            VectorCopy(puVar1->normal, out_normal);
             break;
+        }
         puVar1 = puVar1->next;
     }
-    VectorCopy(puVar1->normal, out_normal);
+    CHKVAL("maybeGetVertexLightDirection", out_normal);
 }
 
 
-
-// TODO - need to review every fpu calculation. recommended to do a side-by-side comparison with the original arghrad in a debugger
 void maybePhongSomething(int facenum, const vec3_t& center, const vec3_t& plane_normal, vec3_t& out_vec_param_4) {
     int local_EBP_165;
     int local_98;
@@ -163,12 +163,17 @@ void maybePhongSomething(int facenum, const vec3_t& center, const vec3_t& plane_
     vec3_t local_18;
     vec3_t local_c;
 
+    CHKVAL2("maybePhongSomething-facenum", facenum);
+    CHKVAL2("maybePhongSomething-center", center);
+
     VectorCopy(plane_normal, out_vec_param_4);
-    if (nocurve != 0) {
+    if (nocurve) {
+        CHKVAL("maybePhongSomething-ret3", true);
         return;
     }
     short sVar7 = dfaces[facenum].texinfo;
     if ((texinfo[sVar7].flags & SURF_CURVE) == 0) {
+        CHKVAL("maybePhongSomething-ret3", true);
         return;
     }
     switch (dplanes[dfaces[facenum].planenum].type) {
@@ -221,27 +226,37 @@ void maybePhongSomething(int facenum, const vec3_t& center, const vec3_t& plane_
 
     if ((maxs.data[local_EBP_165] - mins.data[local_EBP_165]) < (maxs.data[local_98] - mins.data[local_98])) {
 
+        // TODO this looks wrong
         float ftmp = maxs.data[local_EBP_165];
         float ftmp2 = mins.data[local_EBP_165];
-        maxs.data[local_98] = maxs.data[local_98];
         float fVar9 = mins.data[local_98];
+        maxs.data[local_98] = maxs.data[local_98];
         maxs.data[local_EBP_165] = ftmp;
         mins.data[local_98] = fVar9;
         mins.data[local_EBP_165] = ftmp2;
 
         pdVar13 = local_98;
     }
+    CHKVAL("maybePhongSomething-mins", mins);
+    CHKVAL("maybePhongSomething-maxs", maxs);
+    CHKVAL("maybePhongSomething-pdVar13", pdVar13);
 
-    float *pfVar2 = &local_6c.data[pdVar13];
+    auto* pfVar2 = &local_6c.data[pdVar13];
     VectorSubtract(center, plane_normal, local_6c);
+    CHKVAL("maybePhongSomething-local_6c", local_6c);
     if (*pfVar2 < maxs.data[pdVar13]) {
-        if (*pfVar2 <= maxs.data[pdVar13]) {
+        if (*pfVar2 <= mins.data[pdVar13]) {
             *pfVar2 = mins.data[pdVar13] + 0.09999999;
         }
     }
     else {
         *pfVar2 = maxs.data[pdVar13] - 0.09999999;
     }
+    CHKVAL("maybePhongSomething-pfVar2", *pfVar2);
+
+    // TODO MERGE pdVar13=>local_EBP_165
+    if (local_EBP_165 != pdVar13) BREAK;
+
 
     int txLightValue = texinfo[sVar7].value;
     int local_74 = 0;
@@ -259,32 +274,39 @@ void maybePhongSomething(int facenum, const vec3_t& center, const vec3_t& plane_
                 vertexnum_00 = dedges[edge].v[0];
                 vertexnum = dedges[edge].v[1];
             }
+
             if ((local_90 == 0) &&
-                (local_6c.data[pdVar13] == dvertexes[vertexnum_00].point.data[local_98]) &&
-                local_6c.data[pdVar13] == dvertexes[vertexnum_00].point.data[pdVar13])
+                (local_6c.data[local_98] == dvertexes[vertexnum_00].point.data[local_98]) &&
+                local_6c.data[local_EBP_165] == dvertexes[vertexnum_00].point.data[local_EBP_165])
             {
                 maybeGetVertexLightDirection(vertexnum_00, txLightValue, facenum, out_vec_param_4);
+                CHKVAL("maybePhongSomething-ret1", true);
                 return;
             }
+
             if ((local_6c.data[local_98] == dvertexes[vertexnum].point.data[local_98]) &&
-                local_6c.data[pdVar13] == dvertexes[vertexnum].point.data[pdVar13])
+                local_6c.data[local_EBP_165] == dvertexes[vertexnum].point.data[local_EBP_165])
             {
                 maybeGetVertexLightDirection(vertexnum, txLightValue, facenum, out_vec_param_4);
+                CHKVAL("maybePhongSomething-ret2", true);
                 return;
             }
 
-            // TODO LOTS OF VERIFICATION NEEDED
-            // try simplifying with variables....... 
+            CHKVAL("maybePhongSomething-v1", dvertexes[vertexnum_00].point);
+            CHKVAL("maybePhongSomething-v2", dvertexes[vertexnum].point);
+            CHKVAL("maybePhongSomething-local74", local_74);
 
             if (dvertexes[vertexnum_00].point.data[pdVar13] != dvertexes[vertexnum].point.data[pdVar13]) {
+                CHKVAL("maybePhongSomething-vif1", true);
 
                 if ((*pfVar2 < dvertexes[vertexnum].point.data[pdVar13]) || (*pfVar2 > dvertexes[vertexnum_00].point.data[pdVar13])) {
+                    CHKVAL("maybePhongSomething-vif2", true);
 
                     if ((dvertexes[vertexnum_00].point.data[pdVar13] <= *pfVar2) &&
                         (local_6c.data[pdVar13] <= dvertexes[vertexnum].point.data[pdVar13])) {
 
                         if (local_74 == 0) {
-                            VectorCopy(dvertexes[0].point, local_48);
+                            VectorCopy(dvertexes[vertexnum].point, local_48);
                             VectorCopy(dvertexes[vertexnum_00].point, local_30);
                             maybeGetVertexLightDirection(vertexnum, txLightValue, facenum, local_3c);
                             maybeGetVertexLightDirection(vertexnum_00, txLightValue, facenum, local_area);
@@ -300,6 +322,7 @@ void maybePhongSomething(int facenum, const vec3_t& center, const vec3_t& plane_
                     }
                 }
                 else {
+                    CHKVAL("maybePhongSomething-vif3", true);
                     if (local_74 == 0) {
                         VectorCopy(dvertexes[vertexnum_00].point, local_48);
                         VectorCopy(dvertexes[vertexnum].point, local_30);
@@ -319,32 +342,43 @@ void maybePhongSomething(int facenum, const vec3_t& center, const vec3_t& plane_
             local_90 += 1;
         } while (local_90 < dfaces[facenum].numedges);
     }
+
+    CHKVAL("maybePhongSomething-lastif", true);
+
     if (local_90 != dfaces[facenum].numedges) {
+        CHKVAL("maybePhongSomething-lastif2", local_30);
+        CHKVAL("maybePhongSomething-lastif2", local_48);
 
         if (local_48.data[pdVar13] != local_30.data[pdVar13]) {
+            CHKVAL("maybePhongSomething-lastif3", afStack96);
+            CHKVAL("maybePhongSomething-lastif3", local_18);
 
             if (afStack96.data[pdVar13] != local_18.data[pdVar13]) {
 
-                float fVar3 = 1 - ((local_48.data[pdVar13] - *pfVar2) / (local_48.data[pdVar13] - local_30.data[pdVar13]));
-                VectorScale(local_3c, fVar3, mins);
+                CHKVAL("local_30", local_30);
+                CHKVAL("local_48", local_48);
+
+                float fVar3 = ((local_48.data[pdVar13] - *pfVar2) / (local_48.data[pdVar13] - local_30.data[pdVar13]));
+                CHKVAL("local_a0", fVar3);
+                VectorScale(local_3c, (1 - fVar3), mins);
                 VectorMA(mins, (double)fVar3, local_area, mins);
                 fVar3 = local_48.data[local_98] - (local_48.data[local_98] - local_30.data[local_98]) * fVar3;
-                float fVar4 = 1 - ((afStack96.data[pdVar13] - *pfVar2) / (afStack96.data[pdVar13] - local_18.data[pdVar13]));
-                VectorScale(local_54, fVar4, maxs);
+                float fVar4 = ((afStack96.data[pdVar13] - *pfVar2) / (afStack96.data[pdVar13] - local_18.data[pdVar13]));
+                VectorScale(local_54, (1 - fVar4), maxs);
                 VectorMA(maxs, (double)fVar4, local_c, maxs);
 
                 if (local_48.data[local_98] == (afStack96.data[local_98] - local_18.data[local_98]) * fVar4 - afStack96.data[local_98]) {
-                    fVar3 = fVar3 + 0.00001f;
+                    fVar3 += 0.00001f;
                 }
 
                 fVar3 = (fVar3 - local_6c.data[local_98]) / (fVar3 - (afStack96.data[local_98] - (afStack96.data[local_98] - local_18.data[local_98]) * fVar4));
-                fVar4 = 1 - fVar3;
-                VectorScale(mins, fVar4, out_vec_param_4);
+                VectorScale(mins, (1 - fVar3), out_vec_param_4);
                 VectorMA(out_vec_param_4, (double)fVar3, maxs, out_vec_param_4);
                 VectorNormalize(out_vec_param_4, out_vec_param_4);
             }
         }
     }
+    CHKVAL("maybePhongSomething-ret3", true);
 }
 
 /*
@@ -370,12 +404,14 @@ void MakePatchForFace(int fn, winding_t *w, entity_t* ent)
         area = 0;
     }
     totalarea += area;
+    CHKVAL("MakePatchForFace", totalarea);
 
     patch_t* patch = &patches[num_patches];
     if (num_patches == MAX_PATCHES)
         Error("num_patches == MAX_PATCHES");
     patch->next = face_patches[fn];
     face_patches[fn] = patch;
+    patch->facenum = fn;
 
     patch->winding = w;
 
@@ -402,7 +438,7 @@ void MakePatchForFace(int fn, winding_t *w, entity_t* ent)
     //if (patch->cluster == -1)
     //    qprintf("patch->cluster == -1\n");
 
-    maybePhongSomething(fn, patch->origin, patch->plane->normal, patch->field_0x6c);
+    maybePhongSomething(fn, patch->origin, patch->plane->normal, patch->normal);
 
     patch->area = area;
     if (area != 0 && area < 1)
@@ -528,6 +564,7 @@ void MakePatches(void)
 
     qprintf("%i faces\n", numfaces);
 
+    CHKVAL("MakePatches-nummodels", nummodels);
     for (int i = 0; i < nummodels; i++)
     {
         mod = &dmodels[i];
@@ -555,6 +592,7 @@ void MakePatches(void)
             }
         }
 
+        CHKVAL("MakePatches-numfaces", mod->numfaces);
         for (int j = 0; j < mod->numfaces; j++)
         {
             int fn = mod->firstface + j;
@@ -598,9 +636,9 @@ void FinishSplit(patch_t *patch, patch_t *newp)
     if (patch->area != 0) {
         patch->area = WindingArea(patch->winding);
         newp->area = WindingArea(newp->winding);
-        if (patch->area <= 1)
+        if (patch->area < 1)
             patch->area = 1;
-        if (newp->area <= 1)
+        if (newp->area < 1)
             newp->area = 1;
     }
     else {
@@ -612,13 +650,13 @@ void FinishSplit(patch_t *patch, patch_t *newp)
     VectorAdd(patch->origin, patch->plane->normal, patch->origin);
     leaf = PointInLeaf(patch->origin);
     patch->cluster = leaf->cluster;
-    maybePhongSomething(patch->facenum, patch->origin, patch->plane->normal, patch->field_0x6c);
+    maybePhongSomething(patch->facenum, patch->origin, patch->plane->normal, patch->normal);
 
     WindingCenter(newp->winding, newp->origin);
     VectorAdd(newp->origin, newp->plane->normal, newp->origin);
     leaf = PointInLeaf(newp->origin);
     newp->cluster = leaf->cluster;
-    maybePhongSomething(newp->facenum, newp->origin, newp->plane->normal, newp->field_0x6c);
+    maybePhongSomething(newp->facenum, newp->origin, newp->plane->normal, newp->normal);
 }
 
 /*
@@ -709,30 +747,40 @@ void DicePatch(patch_t *patch)
     int		i;
     patch_t	*newp;
 
+    CHKVAL("DicePatch-area", patch->area);
+    CHKVAL("DicePatch-facenum", patch->facenum);
+
     float val;
     w = patch->winding;
     WindingBounds(w, mins, maxs);
+    int txflags = texinfo[dfaces[patch->facenum].texinfo].flags;
+
     for (i = 0; i < 3; i++) {
-        int txflags = texinfo[dfaces[patch->facenum].texinfo].flags;
+        CHKVAL("DicePatch-txflags", txflags);
 
         if (!(txflags & SURF_LIGHT)) {
             if ((txflags & SURF_CURVE)) {
+                CHKVAL("DicePatch-chopcurve", ((mins.data[i] + 1) / chopcurve));
                 val = chopcurve;
             }
             else {
+                CHKVAL("DicePatch-subdiv", true);
                 val = subdiv;
             }
         }
         else {
             if (!(txflags & SURF_SKY)) {
                 if (!(txflags & SURF_WARP)) {
+                    CHKVAL("DicePatch-choplight", true);
                     val = choplight;
                 }
                 else {
+                    CHKVAL("DicePatch-chopwarp", true);
                     val = chopwarp;
                 }
             }
             else {
+                CHKVAL("DicePatch-chopsky", true);
                 val = chopsky;
             }
         }
@@ -740,7 +788,9 @@ void DicePatch(patch_t *patch)
         if (floor((mins.data[i] + 1) / val) < floor((maxs.data[i] - 1) / val)) {
             break;
         }
+        CHKVAL("DicePatch-nobreak", true);
     }
+    CHKVAL("DicePatch-i", i);
     if (i == 3)
     {
         // no splitting needed
@@ -753,6 +803,7 @@ void DicePatch(patch_t *patch)
     VectorCopy(vec3_origin, split);
     split.data[i] = 1;
     dist = val * (1 + floor((mins.data[i] + 1) / val));
+    CHKVAL("DicePatch-dist", dist);
     ClipWindingEpsilon(w, split, dist, ON_EPSILON, &o1, &o2);
 
     //

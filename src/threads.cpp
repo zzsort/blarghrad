@@ -120,8 +120,6 @@ WIN32
 
 #define	USED
 
-#include <windows.h>
-
 int		numthreads = -1;
 CRITICAL_SECTION		crit;
 static int enter;

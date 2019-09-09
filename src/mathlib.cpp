@@ -24,6 +24,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "pch.h"
 #include "cmdlib.h"
 #include "mathlib.h"
+#include "verify.h"
 
 vec3_t vec3_origin = { 0,0,0 };
 
@@ -35,11 +36,15 @@ float VectorLength(vec3_t v)
     length = v.x*v.x + v.y*v.y + v.z*v.z;
     length = sqrt(length);		// FIXME
 
+    CHKVAL("VectorLength", (float)length);
     return length;
 }
 
 qboolean VectorCompare(const vec3_t& v1, const vec3_t& v2)
 {
+    CHKVAL("VectorCompare-v1", v1);
+    CHKVAL("VectorCompare-v2", v2);
+
     if (fabs(v1.x - v2.x) > EQUAL_EPSILON || 
         fabs(v1.y - v2.y) > EQUAL_EPSILON || 
         fabs(v1.z - v2.z) > EQUAL_EPSILON)
@@ -55,9 +60,15 @@ vec_t Q_rint(vec_t in)
 
 void VectorMA(const vec3_t& ofs, double scale, const vec3_t& val, vec3_t& out)
 {
+    CHKVAL("VectorMA-ofs", ofs);
+    CHKVAL("VectorMA-scale", (float)scale);
+    CHKVAL("VectorMA-val", val);
+
     out.x = val.x * scale + ofs.x;
     out.y = val.y * scale + ofs.y;
     out.z = val.z * scale + ofs.z;
+
+    CHKVAL("VectorMA-result", out);
 }
 
 void CrossProduct(vec3_t v1, vec3_t v2, vec3_t& cross)
@@ -102,7 +113,9 @@ void _VectorScale(vec3_t v, vec_t scale, vec3_t& out)
 
 vec_t VectorNormalize(vec3_t in, vec3_t& out)
 {
-    vec_t	length, ilength;
+    double	length, ilength;
+
+    CHKVAL("VectorNormalize-in", in);
 
     length = sqrt(in.x*in.x + in.y*in.y + in.z*in.z);
     if (length == 0)
@@ -116,6 +129,7 @@ vec_t VectorNormalize(vec3_t in, vec3_t& out)
     out.y = in.y * ilength;
     out.z = in.z * ilength;
 
+    CHKVAL("VectorNormalize-retlen", (float)length);
     return length;
 }
 
@@ -129,13 +143,17 @@ vec_t ColorNormalize(vec3_t in, vec3_t& out)
     if (in.z > max)
         max = in.z;
 
-    if (max == 0)
+    if (max == 0) {
+        CHKVAL("ColorNormalize-ret0", true);
         return 0;
+    }
 
     scale = 1.0 / max;
 
     VectorScale(in, scale, out);
 
+    CHKVAL("ColorNormalize-out", out);
+    CHKVAL("ColorNormalize-retmax", max);
     return max;
 }
 

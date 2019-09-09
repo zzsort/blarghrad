@@ -12,13 +12,11 @@ The main tools used were Ghidra, Ida and windbg. The process of creating the ini
 
 ## Current status / TODO:
 
-- Basic lighting is working.
+- Lighting is working, including bounce and phong.
 - The -update flag is not implemented yet.
 - Image file formats (pcx, tga, jpg, m8, m32) are not implemented yet (only .wal).
-- The code has not been organized.
-- Currently runs slower than the original, which probably means there are wrong conditions or bad generated data. There is no reason for it to run slower if it is doing the same work.
-- Spotlights point in the wrong direction.
-- Phong is not working.
+- Performance test.
+- Test sunlight, all command args and entity options.
 
 ## Possible bugs to look for:
 

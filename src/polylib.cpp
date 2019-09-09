@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "cmdlib.h"
 #include "mathlib.h"
 #include "polylib.h"
+#include "verify.h"
 
 
 extern int numthreads;
@@ -182,6 +183,8 @@ void	WindingBounds(winding_t *w, vec3_t& mins, vec3_t& maxs)
         if (v > maxs.z)
             maxs.z = v;
     }
+    CHKVAL("WindingBounds-mins", mins);
+    CHKVAL("WindingBounds-maxs", maxs);
 }
 
 /*
@@ -191,15 +194,14 @@ WindingCenter
 */
 void	WindingCenter(winding_t *w, vec3_t& center)
 {
-    int		i;
-    float	scale;
-
     VectorCopy(vec3_origin, center);
-    for (i = 0; i < w->numpoints; i++)
+    for (int i = 0; i < w->numpoints; i++)
         VectorAdd(w->p[i], center, center);
 
-    scale = 1.0 / w->numpoints;
+    double scale = 1.0 / w->numpoints;
     VectorScale(center, scale, center);
+
+    CHKVAL("WindingCenter", center);
 }
 
 /*
@@ -399,33 +401,15 @@ void	ClipWindingEpsilon(winding_t *in, vec3_t normal, vec_t dist,
 
         vec3_t	mid;
 
-        // TODO - dedupe code
-
-        {	// avoid round off error when possible
-            if (normal.x == 1)
-                mid.x = dist;
-            else if (normal.x == -1)
-                mid.x = -dist;
+        // avoid round off error when possible
+        for (int j = 0; j < 3; j++)
+        {
+            if (normal.data[j] == 1)
+                mid.data[j] = dist;
+            else if (normal.data[j] == -1)
+                mid.data[j] = -dist;
             else
-                mid.x = p1.x + dot * (p2.x - p1.x);
-        }
-
-        {	// avoid round off error when possible
-            if (normal.y == 1)
-                mid.y = dist;
-            else if (normal.y == -1)
-                mid.y = -dist;
-            else
-                mid.y = p1.y + dot * (p2.y - p1.y);
-        }
-
-        {	// avoid round off error when possible
-            if (normal.z == 1)
-                mid.z = dist;
-            else if (normal.z == -1)
-                mid.z = -dist;
-            else
-                mid.z = p1.z + dot * (p2.z - p1.z);
+                mid.data[j] = p1.data[j] + dot * (p2.data[j] - p1.data[j]);
         }
 
         VectorCopy(mid, f->p[f->numpoints]);
