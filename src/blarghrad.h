@@ -166,7 +166,7 @@ void NOT_IMPLEMENTED(const char* where);
 
 
 // EXTERN
-int TestLine_r(int node, const vec3_t& start, const vec3_t& stop, vec3_t* out_vec);
+int TestLine_r(int node, const vec3_t* start, const vec3_t* stop, vec3_t* out_vec);
 void MakeTnodes(dmodel_t *bm);
 void FreeTnodes();
 void MakePatches(void);

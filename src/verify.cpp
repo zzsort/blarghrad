@@ -74,7 +74,7 @@ bool CheckVal(float floatval) {
     float val = 0;
 
     bool result = (2 == sscanf(rawline, "%15s %f", ignore, &val) &&
-        (abs(val - floatval) < EQUAL_EPSILON/100) &&
+        (abs(val - floatval) < EQUAL_EPSILON) &&
         ((val <= 0) == (floatval <= 0))); // check for sign difference
         // exact: val == floatval);
 

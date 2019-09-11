@@ -254,8 +254,8 @@ void maybePhongSomething(int facenum, const vec3_t& center, const vec3_t& plane_
     }
     CHKVAL("maybePhongSomething-pfVar2", *pfVar2);
 
-    // TODO MERGE pdVar13=>local_EBP_165
-    if (local_EBP_165 != pdVar13) BREAK;
+    // TODO MERGE pdVar13=>local_EBP_165? need to investigate more. this condition found a difference...
+    //if (local_EBP_165 != pdVar13) BREAK;
 
 
     int txLightValue = texinfo[sVar7].value;

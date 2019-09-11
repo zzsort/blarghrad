@@ -116,7 +116,7 @@ void FreeTnodes()
 //==========================================================
 
 
-int TestLine_r (int node, const vec3_t& start, const vec3_t& stop, vec3_t* out_vec)
+int TestLine_r (int node, const vec3_t* start_, const vec3_t* stop, vec3_t* out_vec)
 {
 	tnode_t	*tnode;
 	float	front, back;
@@ -124,88 +124,94 @@ int TestLine_r (int node, const vec3_t& start, const vec3_t& stop, vec3_t* out_v
 	int		side;
 	int		r;
 
-    if (node & (1 << 31)) {
-        if (out_vec) {
-            VectorCopy(start, (*out_vec));
-            CHKVAL("TestLine_r-outvec", start);
+    vec3_t start = *start_;
+
+    while (true)
+    {
+        if (node & (1 << 31)) {
+            if (out_vec) {
+                VectorCopy(start, (*out_vec));
+                CHKVAL("TestLine_r-outvec", start);
+            }
+            r = node & ~(1 << 31);	// leaf node
+            //CHKVAL("TestLine_r-retleaf", r);
+            return r;
         }
-        r = node & ~(1 << 31);	// leaf node
-        //CHKVAL("TestLine_r-retleaf", r);
-        return r;
-    }
 
-	tnode = &tnodes[node];
+        tnode = &tnodes[node];
 
-    //CHKVAL("TestLine_r-start", start);
-    //CHKVAL("TestLine_r-stop", stop);
-    //CHKVAL("TestLine_r-type", tnode->type);
-    //CHKVAL("TestLine_r-dist", tnode->dist);
+        //CHKVAL("TestLine_r-start", start);
+        //CHKVAL("TestLine_r-stop", stop);
+        //CHKVAL("TestLine_r-type", tnode->type);
+        //CHKVAL("TestLine_r-dist", tnode->dist);
 
-	switch (tnode->type)
-	{
-	case PLANE_X:
-        front = start.x;
-        back = stop.x;
-		break;
-	case PLANE_Y:
-        front = start.y;
-        back = stop.y;
-		break;
-	case PLANE_Z:
-        front = start.z;
-        back = stop.z;
-		break;
-	default:
-		front = (start.x*tnode->normal.x + start.y*tnode->normal.y + start.z*tnode->normal.z) - tnode->dist;
-		back = (stop.x*tnode->normal.x + stop.y*tnode->normal.y + stop.z*tnode->normal.z) - tnode->dist;
+        switch (tnode->type)
+        {
+            case PLANE_X:
+                front = start.x;
+                back = stop->x;
+                break;
+            case PLANE_Y:
+                front = start.y;
+                back = stop->y;
+                break;
+            case PLANE_Z:
+                front = start.z;
+                back = stop->z;
+                break;
+            default:
+                front = (start.x*tnode->normal.x + start.y*tnode->normal.y + start.z*tnode->normal.z) - tnode->dist;
+                back = (stop->x*tnode->normal.x + stop->y*tnode->normal.y + stop->z*tnode->normal.z) - tnode->dist;
 
-        if (front >= -ON_EPSILON && back >= -ON_EPSILON) {
+                if (front >= -ON_EPSILON && back >= -ON_EPSILON) {
+                    //CHKVAL("TestLine_r-c0", true);
+                    //return TestLine_r(tnode->children[0], start, stop, out_vec);
+                    node = tnode->children[0];
+                    continue;
+                }
+                if (front <= ON_EPSILON && back <= ON_EPSILON) {
+                    //CHKVAL("TestLine_r-c1", true);
+                    //return TestLine_r(tnode->children[1], start, stop, out_vec);
+                    node = tnode->children[1];
+                    continue;
+                }
+                goto skip_sub_dist; //break;
+        }
+
+        if (front >= tnode->dist && back >= tnode->dist) {
             //CHKVAL("TestLine_r-c0", true);
-            return TestLine_r(tnode->children[0], start, stop, out_vec);
+            //return TestLine_r(tnode->children[0], start, stop, out_vec);
+            node = tnode->children[0];
+            continue;
         }
-        if (front <= ON_EPSILON && back <= ON_EPSILON) {
+
+        if (front <= tnode->dist && back <= tnode->dist) {
             //CHKVAL("TestLine_r-c1", true);
-            return TestLine_r(tnode->children[1], start, stop, out_vec);
+            //return TestLine_r(tnode->children[1], start, stop, out_vec);
+            node = tnode->children[1];
+            continue;
         }
-        goto skip_sub_dist; //break;
-	}
 
-    if (front >= tnode->dist && back >= tnode->dist) {
-        //CHKVAL("TestLine_r-c0", true);
-		return TestLine_r (tnode->children[0], start, stop, out_vec);
+        front -= tnode->dist;
+        back -= tnode->dist;
+
+    skip_sub_dist:;
+
+        side = front < 0;
+
+        double frac = front / ((double)front - back);
+        mid.x = start.x + (stop->x - start.x)*frac;
+        mid.y = start.y + (stop->y - start.y)*frac;
+        mid.z = start.z + (stop->z - start.z)*frac;
+
+        r = TestLine_r(tnode->children[side], &start, &mid, out_vec);
+        if (r)
+            return r;
+        
+        //return TestLine_r(tnode->children[!side], &mid, stop, out_vec);
+        VectorCopy(mid, start);
+        node = tnode->children[!side];
     }
-
-//#ifdef ENABLE_VERIFICATION
-//    // EPSILON PROBLEMS
-//    if ((front - EQUAL_EPSILON) <= tnode->dist && (back - 0.000458) <= tnode->dist) {
-//#else
-    if (front <= tnode->dist && back <= tnode->dist) {
-//#endif
-        //CHKVAL("TestLine_r-c1", true);
-		return TestLine_r (tnode->children[1], start, stop, out_vec);
-    }
-
-    front -= tnode->dist;
-    back -= tnode->dist;
-
-skip_sub_dist:;
-
-	side = front < 0;
-
-    double frac = front / ((double)front - back);
-	mid.x = start.x + (stop.x - start.x)*frac;
-	mid.y = start.y + (stop.y - start.y)*frac;
-	mid.z = start.z + (stop.z - start.z)*frac;
-
-	r = TestLine_r (tnode->children[side], start, mid, out_vec);
-	if (r)
-		return r;
-	return TestLine_r (tnode->children[!side], mid, stop, out_vec);
-}
-
-int TestLine (const vec3_t& start, const vec3_t& stop, vec3_t* out_vec)
-{
-	return TestLine_r (0, start, stop, out_vec);
 }
 
 
@@ -405,6 +411,7 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
     }
     if ((shfunk->projtex && (shfunk->projtex->has_transparent_pixels != 0)) || (shfunk->maybe_bool != 0))
     {
+        CHKVAL2("shadowfun-maybebool", shfunk->maybe_bool);
         SampleShadowColor(shfunk, local_3c, &color, &dstart);
     }
     if (shfunk->projtex && (shfunk->projtex->has_transparent_pixels != 0)) {
@@ -488,7 +495,7 @@ int TestLine_shadow(const vec3_t& start, const vec3_t& stop, vec3_t *out_param_3
     CHKVAL("TestLine_shadow-stop", stop);
 
     vec3_t local_c = {1, 1, 1};
-    int result = TestLine_r(0, start, stop, out_param_3);
+    int result = TestLine_r(0, &start, &stop, out_param_3);
     if (result == 0) {
         if (g_shadow_world) {
             result = TestLine_shadowmodel(start, stop, out_param_3, &local_c);

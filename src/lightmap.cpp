@@ -1003,7 +1003,7 @@ void CalcPoints2(lightinfo_t *l, float sofs, float tofs, int facenum)
                     //CHKVAL("CalcPoints2-tlr1", true);
                     CHKVAL("CalcPoints2-tlr1-start", vStack3160);
                     CHKVAL("CalcPoints2-tlr1-stop", (*surf));
-                    iVar11 = TestLine_r(0, vStack3160, *surf, /*out*/ &local_c20);
+                    iVar11 = TestLine_r(0, &vStack3160, surf, /*out*/ &local_c20);
                 }
                 else {
                     CHKVAL("CalcPoints2-tlsh1-start", vStack3160);
@@ -1019,7 +1019,7 @@ void CalcPoints2(lightinfo_t *l, float sofs, float tofs, int facenum)
                     }
 
                     if ((i == dfaces[facenum].numedges) &&
-                        (iVar11 = TestLine_r(0, *surf, vStack3172, /*out*/ &local_c20), iVar11 == 0)) {
+                        (iVar11 = TestLine_r(0, surf, &vStack3172, /*out*/ &local_c20), iVar11 == 0)) {
                         VectorCopy(vStack3160, (*surf));
                     }
                     else {
@@ -1104,7 +1104,7 @@ void CalcPoints(lightinfo_t *l, float sofs, float tofs, int facenum)
                 if (leaf->contents != CONTENTS_SOLID) {
 
                     if (!g_shadow_faces[facenum]) {
-                        if (!TestLine_r(0, facemid, *surf, nullptr)) {
+                        if (!TestLine_r(0, &facemid, surf, nullptr)) {
                             break;  // got it
                         }
                     }

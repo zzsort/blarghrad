@@ -144,7 +144,7 @@ vec_t ColorNormalize(vec3_t in, vec3_t& out)
         max = in.z;
 
     if (max == 0) {
-        CHKVAL("ColorNormalize-ret0", true);
+        CHKVAL2("ColorNormalize-ret0", true);
         return 0;
     }
 
@@ -152,8 +152,8 @@ vec_t ColorNormalize(vec3_t in, vec3_t& out)
 
     VectorScale(in, scale, out);
 
-    CHKVAL("ColorNormalize-out", out);
-    CHKVAL("ColorNormalize-retmax", max);
+    CHKVAL2("ColorNormalize-out", out);
+    CHKVAL2("ColorNormalize-retmax", max);
     return max;
 }
 

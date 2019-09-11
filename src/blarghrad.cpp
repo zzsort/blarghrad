@@ -7,6 +7,10 @@
 #include "blarghrad.h"
 //#include "lbmlib.h"
 
+extern "C" {
+#include "jpeglib.h"
+}
+
 // GLOBALS
 vec3_t ambient = { 0, 0, 0 };
 int game = 0;
@@ -180,7 +184,7 @@ void LoadPakdirs(void)
     }
 }
 
-FILE * OpenFileFromDiskOrPak(char *name, int *out_filelength)
+FILE* OpenFileFromDiskOrPak(const char *name, int *out_filelength)
 {
     char diskpath[1024];
 
@@ -212,49 +216,96 @@ FILE * OpenFileFromDiskOrPak(char *name, int *out_filelength)
 }
 
 // returns length
-int LoadPakFile(char *name, void **bytes)
+int LoadPakFile(char *name, byte **bytes)
 {
     int length = 0;
     FILE* f = OpenFileFromDiskOrPak(name, &length);
     if (!f) {
         return 0;
     }
-    *bytes = malloc((size_t)length);
-    if (!bytes) {
+    *bytes = (byte*)malloc((size_t)length);
+    if (!*bytes) {
         Error("LoadPakFile: malloc failed");
     }
-    fread(bytes, length, 1, f);
+    fread(*bytes, length, 1, f);
     fclose(f);
     return length;
 }
 
-// TODO
-int TryLoadPCX(int txnum) {
-    return 0;
-    NOT_IMPLEMENTED(__FUNCTION__);
-    return 0;
-}
-int TryLoadTGA(int txnum) {
-    return 0;
-    NOT_IMPLEMENTED(__FUNCTION__);
-    return 0;
-}
-int TryLoadJPG(int txnum) {
-    return 0;
-    NOT_IMPLEMENTED(__FUNCTION__);
-    return 0;
-}
-int TryLoadM8(int txnum) {
-    return 0;
-    NOT_IMPLEMENTED(__FUNCTION__);
-    return 0;
-}
-int TryLoadM32(int txnum) {
-    return 0;
-    NOT_IMPLEMENTED(__FUNCTION__);
-    return 0;
+
+// if the texture name exists, allocate a texture, else return null.
+projtexture_t* CreateProjTexture(const char* name, int width, int height)
+{
+    for (shadowmodel_t* psVar6 = g_shadow_world; psVar6; psVar6 = psVar6->next) {
+        for (shadowfaces_unk_t* psVar2 = psVar6->shadownext; psVar2; psVar2 = psVar2->next) {
+            if (Q_strcasecmp(name, texinfo[dfaces[psVar2->face].texinfo].texture)) {
+                continue;
+            }
+            projtexture_t* ptex = (projtexture_t*)malloc(sizeof(projtexture_t));
+            if (!ptex) {
+                Error("CreateProjTexture: projtexture malloc failed");
+            }
+            ptex->texture32 = (byte*)malloc(width * height * 4);
+            if (!ptex->texture32) {
+                Error("CreateProjTexture: texture malloc failed");
+            }
+            ptex->width = width;
+            ptex->height = height;
+            ptex->has_transparent_pixels = 0;
+            return ptex;
+        }
+    }
+    return nullptr;
 }
 
+
+void StoreTextureForProjection(projtexture_t *projtex, const char *name)
+{
+    bool isTextureUsed = projtex->has_transparent_pixels != 0;
+    for (shadowmodel_t* local_4 = g_shadow_world; local_4; local_4 = local_4->next) {
+        for (shadowfaces_unk_t* psVar2 = local_4->shadownext; psVar2; psVar2 = psVar2->next) {
+            if (!Q_strcasecmp(name, texinfo[dfaces[psVar2->face].texinfo].texture)) {
+                psVar2->projtex = projtex;
+                if (psVar2->maybe_bool) {
+                    isTextureUsed = true;
+                }
+            }
+        }
+    }
+    if (!isTextureUsed) {
+        for (shadowmodel_t *psVar3 = g_shadow_world; psVar3; psVar3 = psVar3->next) {
+            for (shadowfaces_unk_t* sf = psVar3->shadownext; sf; sf = sf->next) {
+                if (sf->projtex == projtex) {
+                    sf->projtex = nullptr;
+                }
+            }
+        }
+        free(projtex->texture32);
+        free(projtex);
+        return;
+    }
+    projtex->next = g_proj_textures;
+    g_proj_textures = projtex;
+    qprintf("%s stored for projection\n", name);
+}
+
+void FreeProjTextures(void)
+{
+    // clear references to textures
+    for (shadowmodel_t* psVar4 = g_shadow_world; psVar4; psVar4 = psVar4->next) {
+        for (shadowfaces_unk_t* psVar1 = psVar4->shadownext; psVar1; psVar1 = psVar1->next) {
+            psVar1->projtex = 0;
+        }
+    }
+
+    // free textures
+    for (projtexture_t* puVar3 = g_proj_textures; puVar3; puVar3 = puVar3->next) {
+        projtexture_t* tmp = puVar3->next;
+        free(puVar3->texture32);
+        free(puVar3);
+        puVar3 = tmp;
+    }
+}
 
 void SetTextureReflectivity(int txnum)
 {
@@ -262,7 +313,7 @@ void SetTextureReflectivity(int txnum)
         texture_reflectivity[txnum].x *= g_texscale;
         texture_reflectivity[txnum].y *= g_texscale;
         texture_reflectivity[txnum].z *= g_texscale;
-        if (texture_reflectivity[txnum].x <= 1 && texture_reflectivity[txnum].y <= 1 && texture_reflectivity[txnum].z <= 1) {
+        if (texture_reflectivity[txnum].x > 1 || texture_reflectivity[txnum].y > 1 || texture_reflectivity[txnum].z > 1) {
             ColorNormalize(texture_reflectivity[txnum], texture_reflectivity[txnum]);
         }
     }
@@ -294,6 +345,554 @@ void PrintTextureReflectivity(int txnum)
         x, y, z, local_14.x, local_14.y, local_14.z);
 }
 
+bool RelativeFileExists(const char *path)
+{
+    char local_400[1024];
+
+    for (int modOrGame = 0; modOrGame < 2; modOrGame++) {
+        if (modOrGame == 0 && !moddir) {
+            continue;
+        }
+
+        const char* basepath = (modOrGame == 0 ? moddir : gamedir);
+        sprintf(local_400, "%s%s", basepath, path);
+        if (FileExists(local_400)) {
+            return true;
+        }
+
+        pak_t *pak = (modOrGame == 0 ? moddir_paks : gamedir_paks);
+        for (; pak; pak = pak->nextpak)
+        {
+            for (int i = 0; i < pak->numdir; i++)
+            {
+                // copy and ensure the name is null terminated
+                char local_440[sizeof(dpackfile_t::name) + 1];
+                memcpy(local_440, pak->dir[i].name, sizeof(dpackfile_t::name));
+                local_440[sizeof(dpackfile_t::name)] = '\0';
+
+                if (!Q_strcasecmp(path, local_440)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void real_LoadPCX(char *filename, byte **pic, byte **palette, int *width, int *height)
+{
+    byte *raw;
+    int local_4;
+
+    //
+    // load the file
+    //
+    int len = LoadPakFile(filename, &raw);
+    if (len == 0) {
+        local_4 = len;
+        len = LoadFile(filename, &raw);
+    }
+
+    //
+    // parse the PCX file
+    //
+    pcx_t* pcx = (pcx_t*)raw;
+    raw = raw + 0x80;
+    local_4 = len;
+
+    pcx->xmin = LittleShort(pcx->xmin);
+    pcx->ymin = LittleShort(pcx->ymin);
+    pcx->xmax = LittleShort(pcx->xmax);
+    pcx->ymax = LittleShort(pcx->ymax);
+    pcx->hres = LittleShort(pcx->hres);
+    pcx->vres = LittleShort(pcx->vres);
+    pcx->bytes_per_line = LittleShort(pcx->bytes_per_line);
+    pcx->palette_type = LittleShort(pcx->palette_type);
+
+    if (pcx->manufacturer != 0x0a
+        || pcx->version != 5
+        || pcx->encoding != 1
+        || pcx->bits_per_pixel != 8
+        || pcx->xmax >= 640
+        || pcx->ymax >= 480)
+        Error("Bad pcx file %s", filename);
+
+    if (palette)
+    {
+        *palette = (byte*)malloc(768);
+        memcpy(*palette, (byte *)pcx + len - 768, 768);
+    }
+
+    if (width)
+        *width = pcx->xmax + 1;
+    if (height)
+        *height = pcx->ymax + 1;
+
+    if (!pic)
+        return;
+
+    byte* out = (byte*)malloc((pcx->ymax + 1) * (pcx->xmax + 1));
+    if (!out)
+        Error("Skin_Cache: couldn't allocate");
+
+    *pic = out;
+
+    byte* pix = out;
+
+
+    for (int y = 0; y <= pcx->ymax; y++, pix += pcx->xmax + 1)
+    {
+        for (int x = 0; x <= pcx->xmax; )
+        {
+            byte dataByte = *raw++;
+            byte runLength;
+            if ((dataByte & 0xC0) == 0xC0)
+            {
+                runLength = dataByte & 0x3F;
+                dataByte = *raw++;
+            }
+            else
+                runLength = 1;
+
+            while (runLength-- > 0)
+                pix[x++] = dataByte;
+        }
+
+    }
+
+    if (raw - (byte *)pcx > len)
+        Error("PCX file %s was malformed", filename);
+
+    free(pcx);
+}
+
+
+
+int TryLoadPCX(int txnum)
+{
+    char filename[1024];
+    const char* texturename = texinfo[txnum].texture;
+    sprintf(filename, "textures/%s.pcx", texturename);
+    if (!RelativeFileExists(filename)) {
+        return 0;
+    }
+
+    byte *pic;
+    int width, height;
+    real_LoadPCX(filename, &pic, &palette, &width, &height);
+    if (!pic) {
+        return 0;
+    }
+
+    projtexture_t* projtex = CreateProjTexture(texturename, width, height);
+    int pixelcount = width * height;
+
+    int sum_for_avg[3] = {};
+    int num_transparent = 0;
+    for (int i = 0; i < pixelcount; i++) {
+        byte palIndex = pic[i];
+        if (palIndex == 255) {
+            num_transparent++;
+            if (projtex) {
+                projtex->texture32[i * 4 + 3] = 0;
+                projtex->has_transparent_pixels = 1;
+            }
+        }
+        else {
+            for (int k = 0; k < 3; k++) {
+                byte chan = palette[k + palIndex * 3];
+                sum_for_avg[k] = sum_for_avg[k] + chan;
+                if (projtex) {
+                    projtex->texture32[k + i * 4] = chan;
+                }
+            }
+            if (projtex) {
+                projtex->texture32[i * 4 + 3] = 255;
+            }
+        }
+    }
+    if (projtex) {
+        StoreTextureForProjection(projtex, texturename);
+    }
+    if (num_transparent == pixelcount) {
+        VectorClear(texture_reflectivity[txnum]);
+    }
+    else {
+        vec3_t *ref = texture_reflectivity + txnum;
+        for (int j = 0; j < 3; j++) {
+            // TODO - should this cast to float before the first div?
+            ref->data[j] = (float)(sum_for_avg[j] / (pixelcount - num_transparent)) / 255;
+        }
+    }
+    SetTextureReflectivity(txnum);
+    free(pic);
+    return 1;
+}
+
+
+/*
+============================================================================
+
+TARGA IMAGE
+
+============================================================================
+*/
+
+typedef struct _TargaHeader {
+    unsigned char 	id_length, colormap_type, image_type;
+    unsigned short	colormap_index, colormap_length;
+    unsigned char	colormap_size;
+    unsigned short	x_origin, y_origin, width, height;
+    unsigned char	pixel_size, attributes;
+} TargaHeader;
+
+int fgetLittleShort(FILE *f)
+{
+    byte	b1, b2;
+
+    b1 = fgetc(f);
+    b2 = fgetc(f);
+
+    return (short)(b1 + b2 * 256);
+}
+
+/*
+=============
+LoadTGA
+=============
+*/
+void LoadTGA(char *name, byte **pixels, int *width, int *height)
+{
+    int				columns, rows, numPixels;
+    byte			*pixbuf;
+    int				row, column;
+    FILE			*fin;
+    byte			*targa_rgba;
+    TargaHeader		targa_header;
+
+    int filelength;
+    fin = OpenFileFromDiskOrPak(name, &filelength);
+    if (!fin) {
+        fin = fopen(name, "rb");
+        if (!fin)
+            Error("Couldn't read %s", name);
+    }
+
+    targa_header.id_length = fgetc(fin);
+    targa_header.colormap_type = fgetc(fin);
+    targa_header.image_type = fgetc(fin);
+
+    targa_header.colormap_index = fgetLittleShort(fin);
+    targa_header.colormap_length = fgetLittleShort(fin);
+    targa_header.colormap_size = fgetc(fin);
+    targa_header.x_origin = fgetLittleShort(fin);
+    targa_header.y_origin = fgetLittleShort(fin);
+    targa_header.width = fgetLittleShort(fin);
+    targa_header.height = fgetLittleShort(fin);
+    targa_header.pixel_size = fgetc(fin);
+    targa_header.attributes = fgetc(fin);
+
+    if (targa_header.image_type != 2
+        && targa_header.image_type != 10)
+        Error("LoadTGA: Only type 2 and 10 targa RGB images supported\n");
+
+    if (targa_header.colormap_type != 0
+        || (targa_header.pixel_size != 32 && targa_header.pixel_size != 24))
+        Error("Texture_LoadTGA: Only 32 or 24 bit images supported (no colormaps)\n");
+
+    columns = targa_header.width;
+    rows = targa_header.height;
+    numPixels = columns * rows;
+
+    if (width)
+        *width = columns;
+    if (height)
+        *height = rows;
+    targa_rgba = (byte*)malloc(numPixels * 4);
+    *pixels = targa_rgba;
+
+    if (targa_header.id_length != 0)
+        fseek(fin, targa_header.id_length, SEEK_CUR);  // skip TARGA image comment
+
+    if (targa_header.image_type == 2) {  // Uncompressed, RGB images
+        for (row = rows - 1; row >= 0; row--) {
+            pixbuf = targa_rgba + row * columns * 4;
+            for (column = 0; column < columns; column++) {
+                unsigned char red, green, blue, alphabyte;
+                switch (targa_header.pixel_size) {
+                    case 24:
+
+                        blue = getc(fin);
+                        green = getc(fin);
+                        red = getc(fin);
+                        *pixbuf++ = red;
+                        *pixbuf++ = green;
+                        *pixbuf++ = blue;
+                        *pixbuf++ = 255;
+                        break;
+                    case 32:
+                        blue = getc(fin);
+                        green = getc(fin);
+                        red = getc(fin);
+                        alphabyte = getc(fin);
+                        *pixbuf++ = red;
+                        *pixbuf++ = green;
+                        *pixbuf++ = blue;
+                        *pixbuf++ = alphabyte;
+                        break;
+                }
+            }
+        }
+    }
+    else if (targa_header.image_type == 10) {   // Runlength encoded RGB images
+        unsigned char red, green, blue, alphabyte, packetHeader, packetSize, j;
+        for (row = rows - 1; row >= 0; row--) {
+            pixbuf = targa_rgba + row * columns * 4;
+            for (column = 0; column < columns; ) {
+                packetHeader = getc(fin);
+                packetSize = 1 + (packetHeader & 0x7f);
+                if (packetHeader & 0x80) {        // run-length packet
+                    switch (targa_header.pixel_size) {
+                        case 24:
+                            blue = getc(fin);
+                            green = getc(fin);
+                            red = getc(fin);
+                            alphabyte = 255;
+                            break;
+                        case 32:
+                            blue = getc(fin);
+                            green = getc(fin);
+                            red = getc(fin);
+                            alphabyte = getc(fin);
+                            break;
+                    }
+
+                    for (j = 0; j < packetSize; j++) {
+                        *pixbuf++ = red;
+                        *pixbuf++ = green;
+                        *pixbuf++ = blue;
+                        *pixbuf++ = alphabyte;
+                        column++;
+                        if (column == columns) { // run spans across rows
+                            column = 0;
+                            if (row > 0)
+                                row--;
+                            else
+                                goto breakOut;
+                            pixbuf = targa_rgba + row * columns * 4;
+                        }
+                    }
+                }
+                else {                            // non run-length packet
+                    for (j = 0; j < packetSize; j++) {
+                        switch (targa_header.pixel_size) {
+                            case 24:
+                                blue = getc(fin);
+                                green = getc(fin);
+                                red = getc(fin);
+                                *pixbuf++ = red;
+                                *pixbuf++ = green;
+                                *pixbuf++ = blue;
+                                *pixbuf++ = 255;
+                                break;
+                            case 32:
+                                blue = getc(fin);
+                                green = getc(fin);
+                                red = getc(fin);
+                                alphabyte = getc(fin);
+                                *pixbuf++ = red;
+                                *pixbuf++ = green;
+                                *pixbuf++ = blue;
+                                *pixbuf++ = alphabyte;
+                                break;
+                        }
+                        column++;
+                        if (column == columns) { // pixel packet run spans across rows
+                            column = 0;
+                            if (row > 0)
+                                row--;
+                            else
+                                goto breakOut;
+                            pixbuf = targa_rgba + row * columns * 4;
+                        }
+                    }
+                }
+            }
+        breakOut:;
+        }
+    }
+
+    fclose(fin);
+}
+
+int TryLoadTGA(int txnum)
+{
+    char filename[1024];
+
+    byte* pic = nullptr;
+    const char* texturename = texinfo[txnum].texture;
+    sprintf(filename, "textures/%s.tga", texturename);
+    if (!RelativeFileExists(filename)) {
+        return 0;
+    }
+
+    int width, height;
+    LoadTGA(filename, &pic, &width, &height);
+    if (!pic) {
+        return 0;
+    }
+
+    projtexture_t *projtex = CreateProjTexture(texturename, width, height);
+    int pixelcount = width * height;
+    
+    vec3_t sum_for_avg;
+    VectorClear(sum_for_avg);
+    int num_transparent = 0;
+    for (int i = 0; i < pixelcount * 4; i += 4)
+    {
+        if (pic[i + 3] == 0) {
+            num_transparent++;
+        }
+        else {
+            for (int j = 0; j < 3; j++) {
+                byte chan = pic[i + j];
+                sum_for_avg.data[j] += chan;
+                if (projtex) {
+                    projtex->texture32[i + j] = chan;
+                }
+            }
+        }
+        if (projtex) {
+            projtex->texture32[i + 3] = pic[i + 3];
+            if (projtex->texture32[i + 3] != 255) {
+                projtex->has_transparent_pixels = 1;
+            }
+        }
+    }
+    if (projtex) {
+        StoreTextureForProjection(projtex, texturename);
+    }
+    if (num_transparent == pixelcount) {
+        VectorClear(texture_reflectivity[txnum]);
+    }
+    else {
+        double fVar2 = 1.0 / (pixelcount - num_transparent);
+        texture_reflectivity[txnum].x = sum_for_avg.x * fVar2 / 255;
+        texture_reflectivity[txnum].y = sum_for_avg.y * fVar2 / 255;
+        texture_reflectivity[txnum].z = sum_for_avg.z * fVar2 / 255;
+    }
+    SetTextureReflectivity(txnum);
+    free(pic);
+    return 1;
+}
+
+
+void maybe_LoadJPG(const char* filename, byte** bytes, int* width, int* height)
+{
+    jpeg_decompress_struct cinfo;
+    jpeg_error_mgr err;
+    cinfo.err = jpeg_std_error(&err);
+    jpeg_create_decompress(&cinfo, JPEG_LIB_VERSION, sizeof(cinfo));
+
+    int filelength;
+    FILE* f = OpenFileFromDiskOrPak(filename, &filelength);
+    if (!f) {
+        f = fopen(filename, "rb");
+        if (!f) {
+            Error("Couldn\'t read %s", filename);
+        }
+    }
+
+    jpeg_stdio_src(&cinfo, f);
+    jpeg_read_header(&cinfo, 1);
+    *width = cinfo.image_width;
+    *height = cinfo.image_height;
+    *bytes = (byte*)malloc(cinfo.image_width * cinfo.image_height * 3);
+
+    jpeg_start_decompress(&cinfo);
+    int row_stride = cinfo.output_width * cinfo.output_components;
+    JSAMPARRAY rowptr = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
+
+    byte* p = *bytes;
+    while (cinfo.output_scanline < cinfo.output_height) {
+        jpeg_read_scanlines(&cinfo, rowptr, 1);
+        if (cinfo.num_components == 3) {
+            memcpy(p, *rowptr, row_stride);
+            p += row_stride;
+        }
+        else {
+            // grayscale
+            for (int i = 0; i < row_stride; i++) {
+                *p++ = (byte)*rowptr[i];
+                *p++ = (byte)*rowptr[i];
+                *p++ = (byte)*rowptr[i];
+            }
+        }
+    }
+    fclose(f);
+    jpeg_finish_decompress(&cinfo);
+    jpeg_destroy_decompress(&cinfo);
+}
+
+int TryLoadJPG(int txnum)
+{
+    vec3_t sum_for_avg;
+    char filename[1024];
+
+    const char *texturename = texinfo[txnum].texture;
+    sprintf(filename, "textures/%s.jpg", texturename);
+    if (!RelativeFileExists(filename)) {
+        return 0;
+    }
+
+    byte* pic = nullptr;
+    int width, height;
+    maybe_LoadJPG(filename, &pic, &width, &height);
+    if (!pic) {
+        return 0;
+    }
+
+    projtexture_t *projtex = CreateProjTexture(texturename, width, height);
+    int pixels_size = width * height;
+    VectorClear(sum_for_avg);
+    byte* p = pic;
+    for (int i = 0; i < pixels_size; i++, p += 3) {
+        for (int j = 0; j < 3; j++) {
+            byte bVar1 = pic[i*3 + j];
+            sum_for_avg.data[j] += bVar1;
+            if (projtex) {
+                projtex->texture32[i*4 + j] = bVar1;
+            }
+        }
+        if (projtex) {
+            projtex->texture32[i*4 + 3] = 255;
+        }
+        //CHKVAL2("build_sum", sum_for_avg);
+    }
+    if (projtex) {
+        StoreTextureForProjection(projtex, texturename);
+    }
+    CHKVAL2("sum_for_avg", sum_for_avg);
+    double fVar2 = 1.0 / (width * height);
+    texture_reflectivity[txnum].x = sum_for_avg.x * fVar2 / 255;
+    texture_reflectivity[txnum].y = sum_for_avg.y * fVar2 / 255;
+    texture_reflectivity[txnum].z = sum_for_avg.z * fVar2 / 255;
+    SetTextureReflectivity(txnum);
+    free(pic);
+    return 1;
+}
+
+
+int TryLoadM8(int txnum) {
+    return 0;
+    NOT_IMPLEMENTED(__FUNCTION__);
+    return 0;
+}
+int TryLoadM32(int txnum) {
+    return 0;
+    NOT_IMPLEMENTED(__FUNCTION__);
+    return 0;
+}
 
 // returns count of faces
 int MakeShadowFaces(shadowmodel_t *shmod)
@@ -437,87 +1036,9 @@ void MakeShadowModels(void)
     return;
 }
 
-
-
-// if the texture name exists, allocate a texture, else return null.
-projtexture_t* CreateProjTexture(char* name, int width, int height)
-{
-    for (shadowmodel_t* psVar6 = g_shadow_world; psVar6; psVar6 = psVar6->next) {
-        for (shadowfaces_unk_t* psVar2 = psVar6->shadownext; psVar2; psVar2 = psVar2->next) {
-            if (Q_strcasecmp(name, texinfo[dfaces[psVar2->face].texinfo].texture)) {
-                continue;
-            }
-            projtexture_t* ptex = (projtexture_t*)malloc(sizeof(projtexture_t));
-            if (!ptex) {
-                Error("CreateProjTexture: projtexture malloc failed");
-            }
-            ptex->texture32 = (byte*)malloc(width * height * 4);
-            if (!ptex->texture32) {
-                Error("CreateProjTexture: texture malloc failed");
-            }
-            ptex->width = width;
-            ptex->height = height;
-            ptex->has_transparent_pixels = 0;
-            return ptex;
-        }
-    }
-    return nullptr;
-}
-
-
-void StoreTextureForProjection(projtexture_t *projtex, char *name)
-{
-    bool isTextureUsed = projtex->has_transparent_pixels != 0;
-    for (shadowmodel_t* local_4 = g_shadow_world; local_4; local_4 = local_4->next) {
-        for (shadowfaces_unk_t* psVar2 = local_4->shadownext; psVar2; psVar2 = psVar2->next) {
-            if (!Q_strcasecmp(name, texinfo[dfaces[psVar2->face].texinfo].texture)) {
-                psVar2->projtex = projtex;
-                if (psVar2->maybe_bool) {
-                    isTextureUsed = true;
-                }
-            }
-        }
-    }
-    if (!isTextureUsed) {
-        for (shadowmodel_t *psVar3 = g_shadow_world; psVar3; psVar3 = psVar3->next) {
-            for (shadowfaces_unk_t* sf = psVar3->shadownext; sf; sf = sf->next) {
-                if (sf->projtex == projtex) {
-                    sf->projtex = nullptr;
-                }
-            }
-        }
-        free(projtex->texture32);
-        free(projtex);
-        return;
-    }
-    projtex->next = g_proj_textures;
-    g_proj_textures = projtex;
-    qprintf("%s stored for projection\n", name);
-}
-
-void FreeProjTextures(void)
-{
-    // clear references to textures
-    for (shadowmodel_t* psVar4 = g_shadow_world; psVar4; psVar4 = psVar4->next) {
-        for (shadowfaces_unk_t* psVar1 = psVar4->shadownext; psVar1; psVar1 = psVar1->next) {
-            psVar1->projtex = 0;
-        }
-    }
-
-    // free textures
-    for (projtexture_t* puVar3 = g_proj_textures; puVar3; puVar3 = puVar3->next) {
-        projtexture_t* tmp = puVar3->next;
-        free(puVar3->texture32);
-        free(puVar3);
-        puVar3 = tmp;
-    }
-}
-
-
 int CalcTextureReflectivity(int txnum)
 {
     char path[1024];
-    miptex_t* malloc_bytes;
 
     if (!palette) {
         palette = (byte*)malloc(768);
@@ -525,60 +1046,70 @@ int CalcTextureReflectivity(int txnum)
             Error("CalcTextureReflectivity: malloc failed");
         }
         sprintf(path, "pics/colormap.pcx");
-        if (!LoadPakFile(path, (void**)&malloc_bytes)) {
+        byte* palbytes = nullptr;
+        int length = LoadPakFile(path, (byte**)&palbytes);
+        if (length < 768) {
             printf("WARNING: Colormap not found - no colored texture lighting\n");
-            memset(palette, 0xFF, 768);
+            memset(palette, 255, 768);
         }
         else {
-            memcpy(palette, malloc_bytes, 768);
-            free(malloc_bytes);
+            memcpy(palette, palbytes + length - 768, 768);
+            free(palbytes);
         }
     }
+
+    miptex_t* wal;
     sprintf(path, "textures/%s.wal", texinfo[txnum].texture);
-    if (!LoadPakFile(path, (void**)&malloc_bytes)) {
+    if (!LoadPakFile(path, (byte**)&wal)) {
         return 0;
     }
-    int pixelcount = malloc_bytes->width * malloc_bytes->height;
-    int rgbsum[3] = { 0,0,0 };
-    int rgbcount = 0;
+    int pixelcount = wal->width * wal->height;
+    int rgbsum[3] = {};
+    int num_transparent = 0;
 
-    projtexture_t* projtex = CreateProjTexture(texinfo[txnum].texture, malloc_bytes->width, malloc_bytes->height);
-    byte* pic = &((byte*)malloc_bytes)[malloc_bytes->offsets[0]];
+    projtexture_t* projtex = CreateProjTexture(texinfo[txnum].texture, wal->width, wal->height);
+    byte* pic = &((byte*)wal)[wal->offsets[0]];
     for (int i = 0; i < pixelcount; i++) {
         byte color = pic[i];
-        if (color == 0xff) {
-            rgbcount++;
+        CHKVAL2("walpx", color);
+        if (color == 255) {
+            num_transparent++;
+            // TODO - probably should clear rgb
             if (projtex) {
                 projtex->texture32[i * 4 + 3] = 0;
                 projtex->has_transparent_pixels = 1;
             }
         }
         else {
-            for (int i = 0; i < 3; i++) {
-                byte chan = palette[color * 3 + i];
-                rgbsum[i] += chan;
+            for (int j = 0; j < 3; j++) {
+                byte chan = palette[color * 3 + j];
+                CHKVAL2("palchan",chan);
+                rgbsum[j] += chan;
                 if (projtex) {
-                    projtex->texture32[i * 4 + i] = chan;
+                    projtex->texture32[i * 4 + j] = chan;
                 }
             }
             if (projtex) {
-                projtex->texture32[i * 4 + 3] = 0xff;
+                projtex->texture32[i * 4 + 3] = 255;
             }
         }
     }
     if (projtex) {
         StoreTextureForProjection(projtex, texinfo[txnum].texture);
     }
-    if (rgbcount == pixelcount) {
+    CHKVAL2("waltran", num_transparent);
+    CHKVAL2("waltotalpx", pixelcount);
+    if (num_transparent == pixelcount) {
         VectorClear(texture_reflectivity[txnum]);
     }
     else {
-        texture_reflectivity[txnum].x = (float)(rgbsum[0] / (pixelcount - rgbcount)) / 255;
-        texture_reflectivity[txnum].y = (float)(rgbsum[1] / (pixelcount - rgbcount)) / 255;
-        texture_reflectivity[txnum].z = (float)(rgbsum[2] / (pixelcount - rgbcount)) / 255;
+        texture_reflectivity[txnum].x = (float)(rgbsum[0] / (pixelcount - num_transparent)) / 255;
+        texture_reflectivity[txnum].y = (float)(rgbsum[1] / (pixelcount - num_transparent)) / 255;
+        texture_reflectivity[txnum].z = (float)(rgbsum[2] / (pixelcount - num_transparent)) / 255;
     }
+    CHKVAL2("texture_reflectivity[txnum]", texture_reflectivity[txnum]);
     SetTextureReflectivity(txnum);
-    free(malloc_bytes);
+    free(wal);
     return 1;
 }
 
@@ -599,24 +1130,22 @@ void CalcTextureReflectivityMain(void)
         int iVar4 = 0;
         for ( ; iVar4 < txnum; iVar4++) {
             if (!Q_strcasecmp(texinfo[txnum].texture, texinfo[iVar4].texture)) {
-                pfVar6->x = texture_reflectivity[iVar4].x;
-                pfVar6->y = texture_reflectivity[iVar4].y;
-                pfVar6->z = texture_reflectivity[iVar4].z;
+                VectorCopy(texture_reflectivity[iVar4], (*pfVar6));
                 break;
             }
         }
 
         // if first time encountering, calculate ref
         if (iVar4 == txnum) {
-            iVar4 = TryLoadTGA(txnum);
-            if ((((iVar4 == 0) && (iVar4 = TryLoadJPG(txnum), iVar4 == 0)) &&
-                    (iVar4 = TryLoadM32(txnum), iVar4 == 0)) &&
-                    (((iVar4 = TryLoadM8(txnum), iVar4 == 0 && (iVar4 = TryLoadPCX(txnum), iVar4 == 0)) &&
-                    (iVar4 = CalcTextureReflectivity(txnum), iVar4 == 0)))) {
-                printf("Couldn\'t load %s\n", tx->texture);
-                pfVar6->x = 0.5f;
-                pfVar6->y = 0.5f;
-                pfVar6->z = 0.5f;
+            if (!TryLoadTGA(txnum) &&
+                !TryLoadJPG(txnum) &&
+                !TryLoadM32(txnum) &&
+                !TryLoadM8(txnum) &&
+                !TryLoadPCX(txnum) &&
+                !CalcTextureReflectivity(txnum))
+            {
+                printf("Couldn't load %s\n", tx->texture);
+                *pfVar6 = { 0.5, 0.5, 0.5 };
             }
             else {
                 PrintTextureReflectivity(txnum);
@@ -2089,7 +2618,6 @@ Lightscale is the normalizer for multisampling
 void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& normal, vec3_t *styletable[MAX_LSTYLES],
     vec3_t *bouncelight, int offset, int mapsize, float lightscale)
 {
-    int				i;
     directlight_t	*l;
     byte			pvs[(MAX_MAP_LEAFS + 7) / 8];
     vec3_t			delta;
@@ -2110,7 +2638,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
     float local_209c[9] = {};
 
     vec3_t local_2078[9];
-    for (i = 0; i < 9; i++) {
+    for (int i = 0; i < 9; i++) {
         local_2078[i] = {1, 1, 1};
     }
 
@@ -2134,7 +2662,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
         numclusters = dvis->numclusters;
     }
 
-    for (i = 0; i < numclusters; i++)
+    for (int i = 0; i < numclusters; i++)
     {
         if (!(pvs[i >> 3] & (1 << (i & 7))))
             continue;
@@ -2357,8 +2885,8 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                             scale = 0;
                         }
 
-                        for (i = 0; i < 9; i++) {
-                            suninfo_t* sun = &the_9_suns[i];
+                        for (int j = 0; j < 9; j++) {
+                            suninfo_t* sun = &the_9_suns[j];
                             if (!sun->bool_maybe_sun_is_active) {
                                 continue;
                             }
@@ -2386,20 +2914,20 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
 
                             float length = VectorNormalize(vStack8516, vStack8516);
                             if ((length * 0.5f <= chopsky) &&
-                                !TestLine_shadow(vStack8528, pos, nullptr, &local_2078[i]) &&
-                                !TestLine_r(0, l->m_origin, vStack8528, nullptr))
+                                !TestLine_shadow(vStack8528, pos, nullptr, &local_2078[j]) &&
+                                !TestLine_r(0, &l->m_origin, &vStack8528, nullptr))
                             {
-                                local_2108[i] = l;
-                                local_209c[i] = fVar3 * sun->light;
-                                if (local_2078[i].x == 1 && local_2078[i].y == 1 && local_2078[i].z == 1) {
-                                    local_212c[i] = 1;
+                                local_2108[j] = l;
+                                local_209c[j] = fVar3 * sun->light;
+                                if (local_2078[j].x == 1 && local_2078[j].y == 1 && local_2078[j].z == 1) {
+                                    local_212c[j] = 1;
                                 }
                             }
 
                             if (sun->diffuse == 0) {
                                 continue;
                             }
-                            if (local_212c[i]) {
+                            if (local_212c[j]) {
                                 continue;
                             }
 
@@ -2423,9 +2951,9 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                             }
 
                             fVar3 = (128.f - length) / 128.f * fVar3 * sun->diffuse;
-                            if (fVar3 > local_20c0[i]) {
-                                local_20c0[i] = fVar3;
-                                local_20e4[i] = l;
+                            if (fVar3 > local_20c0[j]) {
+                                local_20c0[j] = fVar3;
+                                local_20e4[j] = l;
                             }
                         }
                         if (g_sky_ambient == 0) {
@@ -2485,8 +3013,8 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                 else {
                     VectorClear(local_2184);
 
-                    for (i = 0; i < 9; i++) {
-                        suninfo_t* sun = &the_9_suns[i];
+                    for (int j = 0; j < 9; j++) {
+                        suninfo_t* sun = &the_9_suns[j];
                         if ((sun->bool_maybe_sun_is_active != 0) && (sun->style == 0)) {
                         
                             vec3_t& color = (sun->color.x || sun->color.y || sun->color.z == 0) ? sun->color : l->m_color;
@@ -2525,7 +3053,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
     }
 
 
-    for (i = 0; i < 9; i++) {
+    for (int i = 0; i < 9; i++) {
         suninfo_t* sun = &the_9_suns[i];
         if (!sun->bool_maybe_sun_is_active) {
             continue;
@@ -2609,7 +3137,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
         else {
             vec3_t local_2190;
             VectorClear(local_2190);
-            for (i = 0; i < 9; i++) {
+            for (int i = 0; i < 9; i++) {
                 suninfo_t* sun = &the_9_suns[i];
                 if ((sun->bool_maybe_sun_is_active != 0) && (sun->style == 0)) {
                     val = &sun->color;

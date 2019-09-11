@@ -704,7 +704,7 @@ qboolean	FileExists(const char *filename)
 LoadFile
 ==============
 */
-int    LoadFile(const char *filename, void **bufferptr)
+int    LoadFile(const char *filename, byte **bufferptr)
 {
     FILE	*f;
     int    length;
@@ -717,7 +717,7 @@ int    LoadFile(const char *filename, void **bufferptr)
     SafeRead(f, buffer, length);
     fclose(f);
 
-    *bufferptr = buffer;
+    *bufferptr = (byte*)buffer;
     return length;
 }
 
@@ -1156,7 +1156,7 @@ QCopyFile
 */
 void QCopyFile(const char *from, const char *to)
 {
-    void	*buffer;
+    byte	*buffer;
     int		length;
 
     length = LoadFile(from, &buffer);

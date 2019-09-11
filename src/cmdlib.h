@@ -81,7 +81,7 @@ FILE	*SafeOpenRead(const char *filename);
 void	SafeRead(FILE *f, void *buffer, int count);
 void	SafeWrite(FILE *f, void *buffer, int count);
 
-int		LoadFile(const char *filename, void **bufferptr);
+int		LoadFile(const char *filename, byte **bufferptr);
 int		TryLoadFile(const char *filename, void **bufferptr);
 void	SaveFile(const char *filename, void *buffer, int count);
 qboolean	FileExists(const char *filename);

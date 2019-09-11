@@ -2,5 +2,7 @@
 /src/Debug/*
 /src/Release/*
 /src/x64/*
+/src/libjpeg/Debug/*
+/src/libjpeg/x64/*
 *.filters
 *.user

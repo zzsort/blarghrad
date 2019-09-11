@@ -63,7 +63,7 @@ void AddScriptToStack(char *filename)
         Error("script file exceeded MAX_INCLUDES");
     strcpy(script->filename, ExpandPath(filename));
 
-    size = LoadFile(script->filename, (void **)&script->buffer);
+    size = LoadFile(script->filename, (byte **)&script->buffer);
 
     printf("entering %s\n", script->filename);
 

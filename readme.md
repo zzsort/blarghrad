@@ -13,8 +13,8 @@ The main tools used were Ghidra, Ida and windbg. The process of creating the ini
 ## Current status / TODO:
 
 - Lighting is working, including bounce and phong.
+- Supports JPG, TGA, PCX and WAL. Not supported yet: M32 and M8 formats.
 - The -update flag is not implemented yet.
-- Image file formats (pcx, tga, jpg, m8, m32) are not implemented yet (only .wal).
 - Performance test.
 - Test sunlight, all command args and entity options.
 
