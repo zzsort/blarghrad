@@ -30,7 +30,8 @@ void CHK_DISABLE() {
 bool NextLine() {
     bool result = fgets(rawline, _countof(rawline), f);
     if (!result) {
-        printf("unexpected EOF");
+        printf("unexpected EOF\n");
+        system("pause");
     }
     else {
         rawline[strcspn(rawline, "\r\n")] = 0;
@@ -99,10 +100,10 @@ bool VectorCompareNOCHK(const vec3_t& v1, const vec3_t& v2)
         return false;
 
     // check sign difference
-    if ((v1.x <= 0) != (v2.x <= 0) ||
+/*    if ((v1.x <= 0) != (v2.x <= 0) ||
         (v1.y <= 0) != (v2.y <= 0) ||
         (v1.z <= 0) != (v2.z <= 0))
-        return false;
+        return false;*/
 
     return true;
 }

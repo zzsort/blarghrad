@@ -236,9 +236,9 @@ int LoadPakFile(char *name, byte **bytes)
 // if the texture name exists, allocate a texture, else return null.
 projtexture_t* CreateProjTexture(const char* name, int width, int height)
 {
-    for (shadowmodel_t* psVar6 = g_shadow_world; psVar6; psVar6 = psVar6->next) {
-        for (shadowfaces_unk_t* psVar2 = psVar6->shadownext; psVar2; psVar2 = psVar2->next) {
-            if (Q_strcasecmp(name, texinfo[dfaces[psVar2->face].texinfo].texture)) {
+    for (shadowmodel_t* m = g_shadow_world; m; m = m->next) {
+        for (shadowfaces_unk_t* sf = m->shadownext; sf; sf = sf->next) {
+            if (Q_strcasecmp(name, texinfo[dfaces[sf->face].texinfo].texture)) {
                 continue;
             }
             projtexture_t* ptex = (projtexture_t*)malloc(sizeof(projtexture_t));
@@ -261,20 +261,20 @@ projtexture_t* CreateProjTexture(const char* name, int width, int height)
 
 void StoreTextureForProjection(projtexture_t *projtex, const char *name)
 {
-    bool isTextureUsed = projtex->has_transparent_pixels != 0;
-    for (shadowmodel_t* local_4 = g_shadow_world; local_4; local_4 = local_4->next) {
-        for (shadowfaces_unk_t* psVar2 = local_4->shadownext; psVar2; psVar2 = psVar2->next) {
-            if (!Q_strcasecmp(name, texinfo[dfaces[psVar2->face].texinfo].texture)) {
-                psVar2->projtex = projtex;
-                if (psVar2->maybe_bool) {
+    bool isTextureUsed = (projtex->has_transparent_pixels != 0);
+    for (shadowmodel_t* m = g_shadow_world; m; m = m->next) {
+        for (shadowfaces_unk_t* sf = m->shadownext; sf; sf = sf->next) {
+            if (!Q_strcasecmp(name, texinfo[dfaces[sf->face].texinfo].texture)) {
+                sf->projtex = projtex;
+                if (sf->maybe_bool) {
                     isTextureUsed = true;
                 }
             }
         }
     }
     if (!isTextureUsed) {
-        for (shadowmodel_t *psVar3 = g_shadow_world; psVar3; psVar3 = psVar3->next) {
-            for (shadowfaces_unk_t* sf = psVar3->shadownext; sf; sf = sf->next) {
+        for (shadowmodel_t *m = g_shadow_world; m; m = m->next) {
+            for (shadowfaces_unk_t* sf = m->shadownext; sf; sf = sf->next) {
                 if (sf->projtex == projtex) {
                     sf->projtex = nullptr;
                 }
@@ -907,7 +907,7 @@ int MakeShadowFaces(shadowmodel_t *shmod)
         }
 
         int iVar5 = -1;
-        if ((bool)(txflags & SURF_TRANS33) != (bool)(txflags & SURF_TRANS66)) {
+        if ((bool)(txflags & SURF_TRANS33) == (bool)(txflags & SURF_TRANS66)) {
             if ((shmod->nonTransFaces != 0) &&
                 (((char)txflags < '\0' || ((shmod->modelnum != 0 && (shmod->nonTransFaces < 0)))))) {
                 iVar5 = 0; // use nonTransFaces
@@ -963,8 +963,7 @@ int MakeShadowFaces(shadowmodel_t *shmod)
 
 void MakeShadowModels(void)
 {
-    const char *pcVar1;
-    const char *pcVar2;
+    const char *value;
     int countModelFaces;
     int totalWorldspawnFaces;
     int totalModelFaces;
@@ -977,18 +976,16 @@ void MakeShadowModels(void)
         for (int i = 0; i < num_entities; i++) {
             entity_t *ent = &entities[i];
 
-            pcVar1 = ValueForKey(ent, "classname");
+            value = ValueForKey(ent, "classname");
             if (!strcmp(ValueForKey(ent, "classname"), "worldspawn")) {
-                pcVar1 = ValueForKey(ent, "_shadow");
-                if ((*pcVar1 != '\0') &&
-                    sscanf(pcVar1, "%i %i", &iNonTransFaces, &iTransFaces) == 1) {
+                value = ValueForKey(ent, "_shadow");
+                if ((*value != '\0') &&
+                    sscanf(value, "%i %i", &iNonTransFaces, &iTransFaces) == 1) {
                     iTransFaces = iNonTransFaces;
                 }
             } else {
-                pcVar1 = ValueForKey(ent, "_shadow");
-                if (*pcVar1 != '\0') {
-                    /* value is modnum, string format ex: "*23" */
-                    pcVar2 = ValueForKey(ent, "model");
+                value = ValueForKey(ent, "_shadow");
+                if (*value != '\0') {
                     shadowmodel_t *bmodel = (shadowmodel_t*)malloc(sizeof(shadowmodel_t));
                     if (!bmodel) {
                         Error("MakeShadowModels: bmodel malloc failed");
@@ -997,8 +994,9 @@ void MakeShadowModels(void)
                     bmodel->modelnum = 0;
                     bmodel->nonTransFaces = 0;
                     bmodel->transFaces = 0;
-                    bmodel->modelnum = atoi((char *)(pcVar2 + 1));
-                    if (sscanf(pcVar1, "%i %i", &bmodel->nonTransFaces, &bmodel->transFaces) == 1) {
+                    /* value is modnum, string format ex: "*23" */
+                    bmodel->modelnum = atoi(ValueForKey(ent, "model") + 1);
+                    if (sscanf(value, "%i %i", &bmodel->nonTransFaces, &bmodel->transFaces) == 1) {
                         bmodel->transFaces = bmodel->nonTransFaces;
                     }
                     bmodel->next = g_shadow_world;
@@ -1033,7 +1031,6 @@ void MakeShadowModels(void)
         qprintf("%i shadowfaces found (%i world, %i bmodel)\n", totalWorldspawnFaces + totalModelFaces,
             totalWorldspawnFaces, totalModelFaces);
     }
-    return;
 }
 
 int CalcTextureReflectivity(int txnum)
@@ -1071,7 +1068,6 @@ int CalcTextureReflectivity(int txnum)
     byte* pic = &((byte*)wal)[wal->offsets[0]];
     for (int i = 0; i < pixelcount; i++) {
         byte color = pic[i];
-        CHKVAL2("walpx", color);
         if (color == 255) {
             num_transparent++;
             // TODO - probably should clear rgb
@@ -1083,7 +1079,6 @@ int CalcTextureReflectivity(int txnum)
         else {
             for (int j = 0; j < 3; j++) {
                 byte chan = palette[color * 3 + j];
-                CHKVAL2("palchan",chan);
                 rgbsum[j] += chan;
                 if (projtex) {
                     projtex->texture32[i * 4 + j] = chan;
@@ -2182,371 +2177,367 @@ void CreateDirectLights()
 
     num_entity_lights = 0;
     num_surface_lights = 0;
-    int j = 0;
-    if (0 < num_entities) {
-        do {
-            ent = entities + j;
-            name = ValueForKey(ent, "classname");
-            if (!strcmp(name, "worldspawn")) {
-                /* loops 9 times */
-                int i = 0;
-                do {
-                    the_9_suns[i].direction;
-                    the_9_suns[i].light = 200;
-                    VectorClear(the_9_suns[i].color);
-                    the_9_suns[i].diffuse = 0;
-                    the_9_suns[i].diffade = 1;
-                    the_9_suns[i].direction.x = 0;
-                    the_9_suns[i].direction.y = 0;
-                    the_9_suns[i].direction.z = -1;
-                    the_9_suns[i].target = nullptr;
-                    the_9_suns[i].style = 0;
-                    the_9_suns[i].bool_maybe_sun_is_active = 0;
-                    if (i == 0) {
-                        sprintf((char *)key_prefix, "_sun");
+
+    for (int j = 0; j < num_entities; j++) {
+        ent = entities + j;
+        name = ValueForKey(ent, "classname");
+        if (!strcmp(name, "worldspawn"))
+        {
+            for (int i = 0; i < 9; i++)
+            {
+                the_9_suns[i].direction;
+                the_9_suns[i].light = 200;
+                VectorClear(the_9_suns[i].color);
+                the_9_suns[i].diffuse = 0;
+                the_9_suns[i].diffade = 1;
+                the_9_suns[i].direction = { 0, 0, -1 };
+                the_9_suns[i].target = nullptr;
+                the_9_suns[i].style = 0;
+                the_9_suns[i].bool_maybe_sun_is_active = 0;
+                if (i == 0) {
+                    sprintf(key_prefix, "_sun");
+                }
+                else {
+                    sprintf(key_prefix, "_sun%u", i + 1);
+                }
+                sprintf(local_28, "%s_light", key_prefix);
+                fVar23 = FloatForKey(ent, local_28);
+                if (fVar23 != 0) {
+                    the_9_suns[i].light = fVar23;
+                    the_9_suns[i].bool_maybe_sun_is_active = 1;
+                }
+                sprintf(local_28, "%s_diffuse", key_prefix);
+                fVar23 = FloatForKey(ent, local_28);
+                if (fVar23 != 0) {
+                    if (fVar23 >= the_9_suns[i].light) {
+                        the_9_suns[i].diffuse = the_9_suns[i].light;
                     }
                     else {
-                        sprintf((char *)key_prefix, "_sun%u", i + 1);
+                        the_9_suns[i].diffuse = fVar23;
                     }
-                    sprintf(local_28, "%s_light", key_prefix);
+                    the_9_suns[i].bool_maybe_sun_is_active = 1;
+                }
+                sprintf(local_28, "%s_diffade", key_prefix);
+                fVar23 = FloatForKey(ent, local_28);
+                if (fVar23 == 0) {
+                    sprintf(local_28, "%s_difwait", key_prefix);
                     fVar23 = FloatForKey(ent, local_28);
-                    if (fVar23 != 0) {
-                        the_9_suns[i].light = fVar23;
-                        the_9_suns[i].bool_maybe_sun_is_active = 1;
-                    }
-                    sprintf(local_28, "%s_diffuse", key_prefix);
-                    fVar23 = FloatForKey(ent, local_28);
-                    if (fVar23 != 0) {
-                        if (fVar23 >= the_9_suns[i].light) {
-                            the_9_suns[i].diffuse = the_9_suns[i].light;
-                        }
-                        else {
-                            the_9_suns[i].diffuse = fVar23;
-                        }
-                        the_9_suns[i].bool_maybe_sun_is_active = 1;
-                    }
-                    sprintf(local_28, "%s_diffade", key_prefix);
-                    fVar23 = FloatForKey(ent, local_28);
-                    if (fVar23 == 0) {
-                        sprintf(local_28, "%s_difwait", key_prefix);
-                        fVar23 = FloatForKey(ent, local_28);
-                    }
-                    if (fVar23 != 0) {
-                        the_9_suns[i].diffade = fVar23;
-                    }
+                }
+                if (fVar23 != 0) {
+                    the_9_suns[i].diffade = fVar23;
+                }
 
-                    sprintf(local_28, "%s_color", key_prefix);
-                    GetVectorForKey(ent, local_28, the_9_suns[i].color);
-                    if (the_9_suns[i].color.x || the_9_suns[i].color.y || the_9_suns[i].color.z) {
-                        VectorNormalize(the_9_suns[i].color, the_9_suns[i].color);
-                        the_9_suns[i].bool_maybe_sun_is_active = 1;
-                    }
-                    sprintf(local_28, "%s_target", key_prefix);
+                sprintf(local_28, "%s_color", key_prefix);
+                GetVectorForKey(ent, local_28, the_9_suns[i].color);
+                if (the_9_suns[i].color.x || the_9_suns[i].color.y || the_9_suns[i].color.z) {
+                    VectorNormalize(the_9_suns[i].color, the_9_suns[i].color);
+                    the_9_suns[i].bool_maybe_sun_is_active = 1;
+                }
+                sprintf(local_28, "%s_target", key_prefix);
+                pcVar4 = ValueForKey(ent, local_28);
+                the_9_suns[i].target = pcVar4;
+                if (*pcVar4 == '\0') {
+                    sprintf(local_28, "%s", key_prefix);
                     pcVar4 = ValueForKey(ent, local_28);
                     the_9_suns[i].target = pcVar4;
-                    if (*pcVar4 == '\0') {
-                        sprintf(local_28, "%s", key_prefix);
-                        pcVar4 = ValueForKey(ent, local_28);
-                        the_9_suns[i].target = pcVar4;
-                    }
+                }
 
-                    if (*the_9_suns[i].target == '\0') {
-                        sprintf(local_28, "%s_angle", key_prefix);
-                        pcVar4 = ValueForKey(ent, local_28);
-                        if (*pcVar4 != '\0') {
-                        LAB_00407f20:
-                            sscanf(pcVar4, "%f %f", &local_4c, &local_50);
-                            fVar21 = cos(local_50 * Q_PI / 180);
-                            the_9_suns[i].direction.x = fVar21 * cos(local_4c * Q_PI / 180);
-                            the_9_suns[i].direction.y = fVar21 * sin(local_4c * Q_PI / 180);
-                            the_9_suns[i].direction.z = sin(local_50 * Q_PI / 180);
-                            VectorNormalize(the_9_suns[i].direction, the_9_suns[i].direction);
-                            goto LAB_00407fd9;
-                        }
-                        sprintf(local_28, "%s_mangle", key_prefix);
-                        pcVar4 = ValueForKey(ent, local_28);
-                        if (*pcVar4 != '\0')
-                            goto LAB_00407f20;
-                        sprintf(local_28, "%s_vector", key_prefix);
-                        GetVectorForKey(ent, local_28, the_9_suns[i].direction);
-                        if (the_9_suns[i].direction.x || the_9_suns[i].direction.y || the_9_suns[i].direction.z) {
-                            VectorNormalize(the_9_suns[i].direction, the_9_suns[i].direction);
-                            goto LAB_00407fd9;
-                        }
+                if (*the_9_suns[i].target == '\0') {
+                    sprintf(local_28, "%s_angle", key_prefix);
+                    pcVar4 = ValueForKey(ent, local_28);
+                    if (*pcVar4 != '\0') {
+                    LAB_00407f20:
+                        sscanf(pcVar4, "%f %f", &local_4c, &local_50);
+                        fVar21 = cos(local_50 * Q_PI / 180);
+                        the_9_suns[i].direction.x = fVar21 * cos(local_4c * Q_PI / 180);
+                        the_9_suns[i].direction.y = fVar21 * sin(local_4c * Q_PI / 180);
+                        the_9_suns[i].direction.z = sin(local_50 * Q_PI / 180);
+                        VectorNormalize(the_9_suns[i].direction, the_9_suns[i].direction);
+                        goto LAB_00407fd9;
                     }
-                    else {
-                    LAB_00407fd9:
-                        the_9_suns[i].bool_maybe_sun_is_active = 1;
-                    }
-
-                    sprintf(local_28, "%s_style", key_prefix);
-                    targetname = ValueForKey(ent, local_28);
-                    if (*targetname) {
-                        ent_00 = FindEntityTarget(targetname, "light");
-                        if (!ent_00) {
-                            iVar11 = atoi(targetname);
-                        }
-                        else {
-                            iVar11 = (int)FloatForKey(ent_00, "style");
-                        }
-                        the_9_suns[i].style = iVar11;
-                        the_9_suns[i].bool_maybe_sun_is_active = 1;
-                    }
-                    i += 1;
-                } while (i < 9);
-                g_sky_ambient = 0.00000000;
-                pcVar4 = ValueForKey(ent, "_sky_ambient");
-                if ((*pcVar4 != '\0') || (pcVar4 = ValueForKey(ent, "_sun_ambient"), *pcVar4 != '\0')) {
-                    iVar11 = sscanf(pcVar4, "%f %f %f", &vec3_t_021d98b0.x, &vec3_t_021d98b0.y, &vec3_t_021d98b0.z);
-                    if (iVar11 < 3) {
-                        g_sky_ambient = vec3_t_021d98b0.x;
-                        VectorClear(vec3_t_021d98b0);
-                    }
-                    else {
-                        g_sky_ambient = ColorNormalize(vec3_t_021d98b0, vec3_t_021d98b0);
+                    sprintf(local_28, "%s_mangle", key_prefix);
+                    pcVar4 = ValueForKey(ent, local_28);
+                    if (*pcVar4 != '\0')
+                        goto LAB_00407f20;
+                    sprintf(local_28, "%s_vector", key_prefix);
+                    GetVectorForKey(ent, local_28, the_9_suns[i].direction);
+                    if (the_9_suns[i].direction.x || the_9_suns[i].direction.y || the_9_suns[i].direction.z) {
+                        VectorNormalize(the_9_suns[i].direction, the_9_suns[i].direction);
+                        goto LAB_00407fd9;
                     }
                 }
-                g_sky_surface = 0.00000000;
-                pcVar4 = ValueForKey(ent, "_sky_surface");
-                if ((*pcVar4 != '\0') || (pcVar4 = ValueForKey(ent, "_sun_surface"), *pcVar4 != '\0')) {
-                    iVar11 = sscanf(pcVar4, "%f %f %f", &vec3_t_021d98a0.x, &vec3_t_021d98a0.y, &vec3_t_021d98a0.z);
-                    if (iVar11 < 3) {
-                        g_sky_surface = vec3_t_021d98a0.x;
-                        VectorClear(vec3_t_021d98a0);
+                else {
+                LAB_00407fd9:
+                    the_9_suns[i].bool_maybe_sun_is_active = 1;
+                }
+
+                sprintf(local_28, "%s_style", key_prefix);
+                targetname = ValueForKey(ent, local_28);
+                if (*targetname) {
+                    ent_00 = FindEntityTarget(targetname, "light");
+                    if (!ent_00) {
+                        iVar11 = atoi(targetname);
                     }
                     else {
-                        g_sky_surface = ColorNormalize(vec3_t_021d98a0, vec3_t_021d98a0);
+                        iVar11 = (int)FloatForKey(ent_00, "style");
                     }
+                    the_9_suns[i].style = iVar11;
+                    the_9_suns[i].bool_maybe_sun_is_active = 1;
                 }
-                if (ambient.x == 0) {
-                    if ((pcVar4 = ValueForKey(ent, "_ambient"), *pcVar4 != '\0') ||
-                        (pcVar4 = ValueForKey(ent, "light"), *pcVar4 != '\0') ||
-                        (pcVar4 = ValueForKey(ent, "_minlight"), *pcVar4 != '\0')) {
-                        if (sscanf(pcVar4, "%f %f %f", &ambient.x, &ambient.y, &ambient.z) < 3) {
-                            ambient.y = ambient.x;
-                            ambient.z = ambient.x;
-                        }
+                CHKVAL2("CDL-has-sun", the_9_suns[i].bool_maybe_sun_is_active);
+            }
+
+            g_sky_ambient = 0;
+            pcVar4 = ValueForKey(ent, "_sky_ambient");
+            if ((*pcVar4 != '\0') || (pcVar4 = ValueForKey(ent, "_sun_ambient"), *pcVar4 != '\0')) {
+                iVar11 = sscanf(pcVar4, "%f %f %f", &vec3_t_021d98b0.x, &vec3_t_021d98b0.y, &vec3_t_021d98b0.z);
+                if (iVar11 < 3) {
+                    g_sky_ambient = vec3_t_021d98b0.x;
+                    VectorClear(vec3_t_021d98b0);
+                }
+                else {
+                    g_sky_ambient = ColorNormalize(vec3_t_021d98b0, vec3_t_021d98b0);
+                }
+            }
+            g_sky_surface = 0;
+            pcVar4 = ValueForKey(ent, "_sky_surface");
+            if ((*pcVar4 != '\0') || (pcVar4 = ValueForKey(ent, "_sun_surface"), *pcVar4 != '\0')) {
+                iVar11 = sscanf(pcVar4, "%f %f %f", &vec3_t_021d98a0.x, &vec3_t_021d98a0.y, &vec3_t_021d98a0.z);
+                if (iVar11 < 3) {
+                    g_sky_surface = vec3_t_021d98a0.x;
+                    VectorClear(vec3_t_021d98a0);
+                }
+                else {
+                    g_sky_surface = ColorNormalize(vec3_t_021d98a0, vec3_t_021d98a0);
+                }
+            }
+            if (ambient.x == 0) {
+                if ((pcVar4 = ValueForKey(ent, "_ambient"), *pcVar4 != '\0') ||
+                    (pcVar4 = ValueForKey(ent, "light"), *pcVar4 != '\0') ||
+                    (pcVar4 = ValueForKey(ent, "_minlight"), *pcVar4 != '\0')) {
+                    if (sscanf(pcVar4, "%f %f %f", &ambient.x, &ambient.y, &ambient.z) < 3) {
+                        ambient.y = ambient.x;
+                        ambient.z = ambient.x;
                     }
                 }
             }
-            if (!strcmp(name, "light")) {
-                numdlights += 1;
-                dl = (directlight_t *)malloc(sizeof(directlight_t));
-                if (!dl) {
-                    Error("CreateDirectLights: (entities) malloc failed");
+        }
+        if (!strcmp(name, "light")) {
+            numdlights++;
+            dl = (directlight_t *)malloc(sizeof(directlight_t));
+            if (!dl) {
+                Error("CreateDirectLights: (entities) malloc failed");
+            }
+            *dl = {};
+            dl->m_emittype = emit_point;
+            GetVectorForKey(ent, "origin", dl->m_origin);
+            pdVar5 = PointInLeaf(dl->m_origin);
+            sVar2 = pdVar5->cluster;
+            dl->m_next = directlights[(int)sVar2];
+            directlights[(int)sVar2] = dl;
+            fVar23 = FloatForKey(ent, "light");
+            if ((fVar23 == 0) && (fVar23 = FloatForKey(ent, "_light"), (fVar23 == 0))) {
+                fVar23 = 300.f;
+            }
+            dl->m_intensity = entity_scale * fVar23;
+            pcVar4 = ValueForKey(ent, "_color");
+            if (!pcVar4 || !*pcVar4) {
+                dl->m_color = { 1, 1, 1 };
+            }
+            else {
+                sscanf(pcVar4, "%f %f %f", &dl->m_color.x, &dl->m_color.y, &dl->m_color.z);
+                ColorNormalize(dl->m_color, dl->m_color);
+            }
+            dl->m_style = (int)FloatForKey(ent, "_style");
+            if (dl->m_style == 0) {
+                dl->m_style = (int)FloatForKey(ent, "style");
+            }
+            if ((dl->m_style < 0) || (dl->m_style > 255)) {
+                dl->m_style = 0;
+            }
+            dl->m_cap = FloatForKey(ent, "_cap");
+            if (dl->m_cap == 0) {
+                dl->m_cap = FloatForKey(ent, "cap");
+            }
+            dl->m_bounce = 1;
+            targetname = ValueForKey(ent, "_bounce");
+            if (((*targetname != 0) ||
+                (targetname = ValueForKey(ent, "bounce"), *targetname != 0)) &&
+                (iVar11 = atoi(targetname), iVar11 == 0)) {
+                dl->m_bounce = 0;
+            }
+            targetname = ValueForKey(ent, "_falloff");
+            if (*targetname == 0) {
+                dl->m_falloff = 0;
+            }
+            else {
+                iVar11 = atoi(targetname);
+                dl->m_falloff = iVar11;
+            }
+            if ((dl->m_falloff < 0) || (2 < dl->m_falloff)) {
+                dl->m_falloff = 0;
+            }
+            dl->m_distance = 1.f;
+            if (dl->m_falloff == 0) {
+                pcVar4 = ValueForKey(ent, "_fade");
+                if (((*pcVar4 != '\0') || (pcVar4 = ValueForKey(ent, "wait"), *pcVar4 != '\0')) ||
+                    (pcVar4 = ValueForKey(ent, "_wait"), *pcVar4 != '\0')) {
+                    dl->m_distance = atof(pcVar4);
                 }
-                *dl = {};
-                dl->m_emittype = emit_point;
-                GetVectorForKey(ent, "origin", dl->m_origin);
-                pdVar5 = PointInLeaf(dl->m_origin);
-                sVar2 = pdVar5->cluster;
-                dl->m_next = directlights[(int)sVar2];
-                directlights[(int)sVar2] = dl;
-                fVar23 = FloatForKey(ent, "light");
-                if ((fVar23 == 0) && (fVar23 = FloatForKey(ent, "_light"), (fVar23 == 0))) {
-                    fVar23 = 300.f;
+                if (dl->m_distance < 0.f) {
+                    dl->m_distance = 0.f;
                 }
-                dl->m_intensity = entity_scale * fVar23;
-                pcVar4 = ValueForKey(ent, "_color");
-                if (!pcVar4 || !*pcVar4) {
-                    dl->m_color.x = 1;
-                    dl->m_color.y = 1;
-                    dl->m_color.z = 1;
-                }
-                else {
-                    sscanf(pcVar4, "%f %f %f", &dl->m_color.x, &dl->m_color.y, &dl->m_color.z);
-                    ColorNormalize(dl->m_color, dl->m_color);
-                }
-                dl->m_style = (int)FloatForKey(ent, "_style");
-                if (dl->m_style == 0) {
-                    dl->m_style = (int)FloatForKey(ent, "style");
-                }
-                if ((dl->m_style < 0) || (dl->m_style > 255)) {
-                    dl->m_style = 0;
-                }
-                dl->m_cap = FloatForKey(ent, "_cap");
-                if (dl->m_cap == 0) {
-                    dl->m_cap = FloatForKey(ent, "cap");
-                }
-                dl->m_bounce = 1;
-                targetname = ValueForKey(ent, "_bounce");
-                if (((*targetname != 0) ||
-                    (targetname = ValueForKey(ent, "bounce"), *targetname != 0)) &&
-                    (iVar11 = atoi(targetname), iVar11 == 0)) {
-                    dl->m_bounce = 0;
-                }
-                targetname = ValueForKey(ent, "_falloff");
-                if (*targetname == 0) {
-                    dl->m_falloff = 0;
-                }
-                else {
-                    iVar11 = atoi(targetname);
-                    dl->m_falloff = iVar11;
-                }
-                if ((dl->m_falloff < 0) || (2 < dl->m_falloff)) {
-                    dl->m_falloff = 0;
-                }
-                dl->m_distance = 1.f;
+            }
+            pcVar4 = ValueForKey(ent, "_distance");
+            if (*pcVar4 != '\0') {
                 if (dl->m_falloff == 0) {
-                    pcVar4 = ValueForKey(ent, "_fade");
-                    if (((*pcVar4 != '\0') || (pcVar4 = ValueForKey(ent, "wait"), *pcVar4 != '\0')) ||
-                        (pcVar4 = ValueForKey(ent, "_wait"), *pcVar4 != '\0')) {
-                        dl->m_distance = atof(pcVar4);
-                    }
-                    if (dl->m_distance < 0.f) {
-                        dl->m_distance = 0.f;
-                    }
+                    dl->m_distance = dl->m_intensity / atof(pcVar4);
                 }
-                pcVar4 = ValueForKey(ent, "_distance");
-                if (*pcVar4 != '\0') {
-                    if (dl->m_falloff == 0) {
-                        dl->m_distance = dl->m_intensity / atof(pcVar4);
-                    }
-                    else {
-                        dl->m_distance = atof(pcVar4);
-                    }
+                else {
+                    dl->m_distance = atof(pcVar4);
                 }
-                pcVar4 = ValueForKey(ent, "_angfade");
+            }
+            pcVar4 = ValueForKey(ent, "_angfade");
+            if (*pcVar4 == '\0') {
+                pcVar4 = ValueForKey(ent, "_angwait");
                 if (*pcVar4 == '\0') {
-                    pcVar4 = ValueForKey(ent, "_angwait");
-                    if (*pcVar4 == '\0') {
-                        dl->m_angwait = 1.f;
-                    }
-                    else {
-                        dl->m_angwait = atof(pcVar4);
-                    }
+                    dl->m_angwait = 1.f;
                 }
                 else {
                     dl->m_angwait = atof(pcVar4);
                 }
-                if (dl->m_angwait < 0.f) {
-                    dl->m_angwait = 0.f;
-                }
-                pcVar4 = ValueForKey(ent, "_focus");
-                if (*pcVar4 == '\0') {
-                    dl->m_focus = 1.f;
-                }
-                else {
-                    fVar21 = atof(pcVar4);
-                    dl->m_focus = fVar21;
-                }
-                if (dl->m_focus < 0.f) {
-                    dl->m_focus = 0.f;
-                }
-                targetname = ValueForKey(ent, "target");
-                const char* mangle_value = ValueForKey(ent, "_spotangle");
-                if (*mangle_value == '\0') {
-                    mangle_value = ValueForKey(ent, "_mangle");
-                }
-                pcVar6 = ValueForKey(ent, "_spotvector");
-                pcVar7 = ValueForKey(ent, "_spotpoint");
+            }
+            else {
+                dl->m_angwait = atof(pcVar4);
+            }
+            if (dl->m_angwait < 0.f) {
+                dl->m_angwait = 0.f;
+            }
+            pcVar4 = ValueForKey(ent, "_focus");
+            if (*pcVar4 == '\0') {
+                dl->m_focus = 1.f;
+            }
+            else {
+                fVar21 = atof(pcVar4);
+                dl->m_focus = fVar21;
+            }
+            if (dl->m_focus < 0.f) {
+                dl->m_focus = 0.f;
+            }
+            targetname = ValueForKey(ent, "target");
+            const char* mangle_value = ValueForKey(ent, "_spotangle");
+            if (*mangle_value == '\0') {
+                mangle_value = ValueForKey(ent, "_mangle");
+            }
+            pcVar6 = ValueForKey(ent, "_spotvector");
+            pcVar7 = ValueForKey(ent, "_spotpoint");
 
-                bool light_spot = !strcmp(name, "light_spot");
-                if (light_spot || *targetname || *pcVar6 || *mangle_value || *pcVar7) {
-                    dl->m_emittype = emit_spotlight;
-                    dl->m_cone = FloatForKey(ent, "_cone");
-                    if (dl->m_cone == 0.f) {
-                        dl->m_cone = 10.f;
-                    }
-                    dl->m_cone = cos(dl->m_cone * (1 / 180.f) * Q_PI);
-                    if (light_spot) {
-                        float ang = FloatForKey(ent, "angle");
-                        if (ang == -1) {
-                            if (ang != -2) {
-                                dl->m_normal.z = 0.00000000;
-                                fVar21 = ang * (1/180.f) * Q_PI;
-                                dl->m_normal.x = cos(fVar21);
-                                dl->m_normal.y = sin(fVar21);
-                            }
-                            else {
-                                dl->m_normal.x = 0.f;
-                                dl->m_normal.y = 0.f;
-                                dl->m_normal.z = -1.f;
-                            }
+            bool light_spot = !strcmp(name, "light_spot");
+            if (light_spot || *targetname || *pcVar6 || *mangle_value || *pcVar7) {
+                dl->m_emittype = emit_spotlight;
+                dl->m_cone = FloatForKey(ent, "_cone");
+                if (dl->m_cone == 0.f) {
+                    dl->m_cone = 10.f;
+                }
+                dl->m_cone = cos(dl->m_cone / 180 * Q_PI);
+                if (light_spot) {
+                    float ang = FloatForKey(ent, "angle");
+                    if (ang == -1) {
+                        if (ang != -2) {
+                            dl->m_normal.z = 0.f;
+                            fVar21 = ang / 180 * Q_PI;
+                            dl->m_normal.x = cos(fVar21);
+                            dl->m_normal.y = sin(fVar21);
                         }
                         else {
                             dl->m_normal.x = 0.f;
                             dl->m_normal.y = 0.f;
-                            dl->m_normal.z = 1.f;
+                            dl->m_normal.z = -1.f;
                         }
                     }
                     else {
-                        if (*targetname == 0) {
-                            if (*mangle_value == '\0') {
-                                if (*pcVar6 == '\0') {
-                                    if (*pcVar7 == '\0')
-                                        goto LAB_0040887d;
-                                    vec3_t pt;
-                                    GetVectorForKey(ent, "_spotpoint", pt);
-                                    VectorSubtract(pt, dl->m_origin, dl->m_normal);
-                                }
-                                else {
-                                    GetVectorForKey(ent, "_spotvector", dl->m_normal);
-                                }
-                                VectorNormalize(dl->m_normal, dl->m_normal);
+                        dl->m_normal.x = 0.f;
+                        dl->m_normal.y = 0.f;
+                        dl->m_normal.z = 1.f;
+                    }
+                }
+                else {
+                    if (*targetname == 0) {
+                        if (*mangle_value == '\0') {
+                            if (*pcVar6 == '\0') {
+                                if (*pcVar7 == '\0')
+                                    goto LAB_0040887d;
+                                vec3_t pt;
+                                GetVectorForKey(ent, "_spotpoint", pt);
+                                VectorSubtract(pt, dl->m_origin, dl->m_normal);
                             }
                             else {
-                                float yaw = 0.f, pitch = 0.f;
-                                sscanf(mangle_value, "%f %f", &yaw, &pitch);
-                                fVar21 = cos(pitch * Q_PI / 180);
-                                dl->m_normal.x = fVar21 * cos(yaw * Q_PI / 180);
-                                dl->m_normal.y = fVar21 * sin(yaw * Q_PI / 180);
-                                dl->m_normal.z = sin(pitch * Q_PI / 180);
-                                VectorNormalize(dl->m_normal, dl->m_normal);
+                                GetVectorForKey(ent, "_spotvector", dl->m_normal);
                             }
+                            VectorNormalize(dl->m_normal, dl->m_normal);
                         }
                         else {
-                            ent_00 = FindEntityTarget(targetname, nullptr);
-                            if (!ent_00) {
-                                printf("WARNING: light at (%i %i %i) has missing target\n", (int)dl->m_origin.x, (int)dl->m_origin.y, (int)dl->m_origin.z);
-                                dl->m_normal.x = 1;
-                                dl->m_normal.y = 0;
-                                dl->m_normal.z = 0;
-                            }
-                            else {
-                                vec3_t origin;
-                                GetVectorForKey(ent_00, "origin", origin);
-                                VectorSubtract(origin, dl->m_origin, dl->m_normal);
-                                VectorNormalize(dl->m_normal, dl->m_normal);
+                            float yaw = 0.f, pitch = 0.f;
+                            sscanf(mangle_value, "%f %f", &yaw, &pitch);
+                            fVar21 = cos(pitch * Q_PI / 180);
+                            dl->m_normal.x = fVar21 * cos(yaw * Q_PI / 180);
+                            dl->m_normal.y = fVar21 * sin(yaw * Q_PI / 180);
+                            dl->m_normal.z = sin(pitch * Q_PI / 180);
+                            VectorNormalize(dl->m_normal, dl->m_normal);
+                        }
+                    }
+                    else {
+                        ent_00 = FindEntityTarget(targetname, nullptr);
+                        if (!ent_00) {
+                            printf("WARNING: light at (%i %i %i) has missing target\n", (int)dl->m_origin.x, (int)dl->m_origin.y, (int)dl->m_origin.z);
+                            dl->m_normal.x = 1;
+                            dl->m_normal.y = 0;
+                            dl->m_normal.z = 0;
+                        }
+                        else {
+                            vec3_t origin;
+                            GetVectorForKey(ent_00, "origin", origin);
+                            VectorSubtract(origin, dl->m_origin, dl->m_normal);
+                            VectorNormalize(dl->m_normal, dl->m_normal);
 
-                                for (int i = 0; i < 9; i++) {
-                                    if (the_9_suns[i].bool_maybe_sun_is_active != 0) {
-                                        if (!strcmp(targetname, the_9_suns[i].target)) {
-                                            VectorCopy(dl->m_normal, the_9_suns[i].direction);
-                                        }
+                            for (int i = 0; i < 9; i++) {
+                                if (the_9_suns[i].bool_maybe_sun_is_active != 0) {
+                                    if (!strcmp(targetname, the_9_suns[i].target)) {
+                                        VectorCopy(dl->m_normal, the_9_suns[i].direction);
                                     }
                                 }
                             }
                         }
                     }
                 }
-            LAB_0040887d:
-                int i = (int)FloatForKey(ent, "_sun");
-
-                if (i > 0 && i < 9) {
-
-                    i--;
-
-                    if (dl->m_normal.x != 0.f || dl->m_normal.y != 0.f || dl->m_normal.z != 0.f) {
-                        VectorCopy(dl->m_normal, the_9_suns[i].direction);
-                    }
-                    VectorCopy(dl->m_color, the_9_suns[i].color);
-                    the_9_suns[i].light = dl->m_intensity;
-                    the_9_suns[i].style = dl->m_style;
-                    the_9_suns[i].diffuse = FloatForKey(ent, "_diffuse");
-                    the_9_suns[i].diffade = FloatForKey(ent, "_diffade");
-                    if (the_9_suns[i].diffade == 0) {
-                        the_9_suns[i].diffade = dl->m_distance;
-                    }
-                    the_9_suns[i].bool_maybe_sun_is_active = 1;
-                }
-                num_entity_lights++;
             }
-            j += 1;
-        } while (j < num_entities);
+
+        LAB_0040887d:
+            int i = (int)FloatForKey(ent, "_sun");
+
+            if (i > 0 && i <= 9) {
+
+                i--;
+
+                if (dl->m_normal.x || dl->m_normal.y || dl->m_normal.z) {
+                    VectorCopy(dl->m_normal, the_9_suns[i].direction);
+                }
+                VectorCopy(dl->m_color, the_9_suns[i].color);
+                the_9_suns[i].light = dl->m_intensity;
+                the_9_suns[i].style = dl->m_style;
+                the_9_suns[i].diffuse = FloatForKey(ent, "_diffuse");
+                the_9_suns[i].diffade = FloatForKey(ent, "_diffade");
+                if (the_9_suns[i].diffade == 0) {
+                    the_9_suns[i].diffade = dl->m_distance;
+                }
+                the_9_suns[i].bool_maybe_sun_is_active = 1;
+                CHKVAL2("CDL-has-sun2", true);
+            }
+            num_entity_lights++;
+        }
     }
 
-    for (j = 0; j < num_patches; j++)
+    for (int j = 0; j < num_patches; j++)
     {
         patch_t* patch = &patches[j];
         if (patch->cluster == -1) {
@@ -2575,7 +2566,7 @@ void CreateDirectLights()
         }
 
         if ( ((texinfo[dl->m_face->texinfo].flags & SURF_SKY) == 0) ||
-            ((!any_sun && (g_sky_ambient == 0)) && (g_sky_surface == 0))) {
+            (!any_sun && (g_sky_ambient == 0) && (g_sky_surface == 0))) {
             dl->m_emittype = emit_surface;
         }
         else {
@@ -2625,10 +2616,10 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
     float			dist;
     float			*dest;
 
-    CHKVAL("GatherSampleLight-pos", pos);
-    CHKVAL("GatherSampleLight-realpt", realpt);
-    CHKVAL("GatherSampleLight-normal", normal);
-    CHKVAL("GatherSampleLight-bouncelight", bouncelight[offset]);
+    CHKVAL2("GatherSampleLight-pos", pos);
+    CHKVAL2("GatherSampleLight-realpt", realpt);
+    CHKVAL2("GatherSampleLight-normal", normal);
+    CHKVAL2("GatherSampleLight-bouncelight", bouncelight[offset]);
 
     // sun related
     int local_212c[9] = {};
@@ -2669,13 +2660,20 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
 
         for (l = directlights[i]; l; l = l->m_next)
         {
+            CHKVAL2("GatherSampleLight-l-orig", l->m_origin);
+            CHKVAL2("GatherSampleLight-l-normal", l->m_normal);
+            CHKVAL2("GatherSampleLight-l-emit", l->m_emittype);
+
             VectorSubtract(l->m_origin, realpt, delta);
             if (l->m_emittype == emit_surface || l->m_emittype == emit_sunlight)
                 VectorSubtract(delta, l->m_normal, delta);
             dist = VectorNormalize(delta, delta);
             dot = DotProduct(delta, normal);
-            if (dot <= 0.001)
+            if (dot < 0.001) {
+                CHKVAL2("GatherSampleLight-front", false);
                 continue; // behind sample surface
+            }
+            CHKVAL2("GatherSampleLight-front", true);
 
             bool bVar6 = false;
             float scale;
@@ -2731,10 +2729,13 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                         dot2 = -DotProduct(delta, l->m_normal);
                         if (texinfo[l->m_face->texinfo].flags & (SURF_SKY|SURF_WARP)) {
                             local_2198_new = 0.1f;
+                            CHKVAL2("GSL-surf-01", true);
                         }
 
                         if (dot2 < 0) {
+                            CHKVAL2("GSL-dot-lt2", true);
                             if (dist >= l->m_choplight) {
+                                CHKVAL2("GatherSampleLight-surf-cont1", true);
                                 continue;
                             }
                             delta.x = (l->m_origin.x - pos.x) - l->m_normal.x;
@@ -2743,6 +2744,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                             dist = VectorNormalize(delta, delta);
                             dot2 = -DotProduct(delta, l->m_normal);
                             if (dot2 < 0) {
+                                CHKVAL2("GatherSampleLight-surf-cont2", true);
                                 continue;
                             }
 
@@ -2784,7 +2786,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                         }
 
                         scale = (l->m_intensity / (dist * dist)) * dot2 * dot;
-                        CHKVAL("GatherSampleLight-surface", scale);
+                        //CHKVAL("GatherSampleLight-surface", scale);
                     }
                     break;
                 case emit_spotlight: // case 2
@@ -2818,6 +2820,8 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                         if (l->m_angwait != 1) {
                             dot = (1 - l->m_angwait) + l->m_angwait * dot;
                         }
+                        CHKVAL2("GSL-spotlight-dot", dot);
+
                         if (l->m_falloff == 0) {
                             if (l->m_intensity >= 0) {
                                 scale = (l->m_intensity - dist) * fVar3 * dot;
@@ -2837,6 +2841,8 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                 case emit_sunlight: // case 3
                     {
                         float fVar3 = -DotProduct(delta, l->m_normal);
+                        float local_2198 = 0.1f;
+
                         if (fVar3 < 0) {
                             if (dist >= l->m_choplight) {
                                 continue;
@@ -2846,12 +2852,12 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                             delta.z = (l->m_origin.z - pos.z) - l->m_normal.z;
                             dist = VectorNormalize(delta, delta);
                             fVar3 = -DotProduct(delta, l->m_normal);
-                            if (fVar3 < -0.001f) {
+                            if (fVar3 < -0.01f) {
                                 continue;
                             }
+                            local_2198 = 0.2f;
                         }
 
-                        float local_2198 = 0.2f;
                         if (fVar3 < local_2198) {
                             fVar3 = local_2198;
                         }
@@ -2885,16 +2891,20 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                             scale = 0;
                         }
 
+                        CHKVAL2("GSL-case3-sunloop", true);
                         for (int j = 0; j < 9; j++) {
                             suninfo_t* sun = &the_9_suns[j];
                             if (!sun->bool_maybe_sun_is_active) {
+                                CHKVAL2("GSL-case3-sunloop-nosun", true);
                                 continue;
                             }
-                            if (local_212c[i]) {
+                            if (local_212c[j]) {
+                                CHKVAL2("GSL-case3-sunloop-no-local_212c", true);
                                 continue;
                             }
                             float fVar3 = -DotProduct(sun->direction, normal);
                             if (fVar3 < 0.001) {
+                                CHKVAL2("GSL-case3-sunloop-chkdot", true);
                                 continue;
                             }
                             vec3_t fStack8504;
@@ -2976,6 +2986,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                 default:
                     Error("Bad l->type");
             }
+            CHKVAL2("GatherSampleLight-endswitch-scale", scale);
 
             if (l->m_style != 0) {
                 if (stylemin > abs(scale)) {
@@ -3200,9 +3211,10 @@ void RadWorld()
     // subdivide patches to a maximum dimension
     SubdividePatches();
 
+    CHK_ENABLE();
+
     // create directlights out of patches and lights
     CreateDirectLights();
-
 
     // build initial facelights
     RunThreadsOn(numfaces, true, BuildFacelights);
@@ -3245,7 +3257,7 @@ int main(int argc, char **argv)
 {
 #ifdef ENABLE_VERIFICATION
     InitVerification();
-    //CHK_DISABLE();
+    CHK_DISABLE();
 #endif
 
     const char* usage = "----- Usage -----\n"

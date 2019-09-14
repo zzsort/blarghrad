@@ -36,7 +36,7 @@ float VectorLength(vec3_t v)
     length = v.x*v.x + v.y*v.y + v.z*v.z;
     length = sqrt(length);		// FIXME
 
-    CHKVAL("VectorLength", (float)length);
+    CHKVAL2("VectorLength", (float)length);
     return length;
 }
 
@@ -68,7 +68,7 @@ void VectorMA(const vec3_t& ofs, double scale, const vec3_t& val, vec3_t& out)
     out.y = val.y * scale + ofs.y;
     out.z = val.z * scale + ofs.z;
 
-    CHKVAL("VectorMA-result", out);
+    CHKVAL2("VectorMA-result", out);
 }
 
 void CrossProduct(vec3_t v1, vec3_t v2, vec3_t& cross)
@@ -115,7 +115,7 @@ vec_t VectorNormalize(vec3_t in, vec3_t& out)
 {
     double	length, ilength;
 
-    CHKVAL("VectorNormalize-in", in);
+    CHKVAL2("VectorNormalize-in", in);
 
     length = sqrt(in.x*in.x + in.y*in.y + in.z*in.z);
     if (length == 0)
@@ -129,7 +129,7 @@ vec_t VectorNormalize(vec3_t in, vec3_t& out)
     out.y = in.y * ilength;
     out.z = in.z * ilength;
 
-    CHKVAL("VectorNormalize-retlen", (float)length);
+    CHKVAL2("VectorNormalize-retlen", (float)length);
     return length;
 }
 

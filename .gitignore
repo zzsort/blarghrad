@@ -4,5 +4,6 @@
 /src/x64/*
 /src/libjpeg/Debug/*
 /src/libjpeg/x64/*
+src/libjpeg/Release/*
 *.filters
 *.user
