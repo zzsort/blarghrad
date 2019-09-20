@@ -1262,10 +1262,10 @@ void FinalLightFace(int facenum)
         {
             CHKVAL("FinalLightFace-otherface", otherface);
 
-            if (((facegroups[facenum].byte1 != 1) ||
+            if (((facegroups[facenum].kind != FaceValueKind::SurfLight) ||
                 (f->planenum == dfaces[otherface].planenum &&
                 (dfaces[facenum].side == dfaces[otherface].side))) &&
-                    ((((texinfo[dfaces[facenum].texinfo].flags & SURF_CURVE) == 0) && (stopbleed == 0)) ||
+                    ((((texinfo[dfaces[facenum].texinfo].flags & SURF_CURVE) == 0) && !stopbleed) ||
                 FacesHaveSharedVertexes(facenum, otherface))) 
             {
                 CHKVAL("FinalLightFace-loop1", true);
@@ -1373,14 +1373,6 @@ void FinalLightFace(int facenum)
                     if (onlybounce)
                     {
                         VectorCopy(color, lb);
-
-                        if (texinfo[f->texinfo].flags & SURF_CURVE)
-                        {
-                        }
-                        else
-                        {
-                            VectorClear(lb);
-                        }
                     }
                     else
                     {

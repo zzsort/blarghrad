@@ -79,8 +79,15 @@ typedef struct
     unsigned short	transfer;
 } transfer_t;
 
+
+enum class FaceValueKind : byte {
+    NoValue = 0,
+    SurfLight = 1,
+    Curve = 2
+};
+
 struct facegroup_t {
-    byte byte1;
+    FaceValueKind kind;
     byte byte2_UNUSED;
     unsigned short start;
     unsigned short end;

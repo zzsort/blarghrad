@@ -1606,14 +1606,14 @@ void BuildFaceGroups()
 
     for (int i = 0; i < numfaces; i++) {
         if (texinfo[dfaces[i].texinfo].value == 0) {
-            facegroups[i].byte1 = 0;
+            facegroups[i].kind = FaceValueKind::NoValue;
         }
         else {
             if ((texinfo[dfaces[i].texinfo].flags & SURF_LIGHT) == 0) {
-                facegroups[i].byte1 = 2;
+                facegroups[i].kind = FaceValueKind::Curve;
             }
             else {
-                facegroups[i].byte1 = 1;
+                facegroups[i].kind = FaceValueKind::SurfLight;
             }
         }
         facegroups[i].start = (unsigned short)i;
@@ -1632,10 +1632,10 @@ void BuildFaceGroups()
                 dface_t* nextface = dfaces + i + 1;
                 int j = i;
                 do {
-                    if (facegroups[i].byte1 == facegroups[j + 1].byte1) {
-                        if (facegroups[i].byte1 == 0) {
+                    if (facegroups[i].kind == facegroups[j + 1].kind) {
+                        if (facegroups[i].kind == FaceValueKind::NoValue) {
                             if ((dfaces[i].planenum == nextface->planenum) && (dfaces[i].side == nextface->side)) {
-                                if (stopbleed != 0) 
+                                if (stopbleed)
                                     goto LAB_0040588f;
                             LAB_0040589d:
                                 unsigned short start = facegroups[i].start;
