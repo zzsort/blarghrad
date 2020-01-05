@@ -1,6 +1,6 @@
 _dummy := $(shell mkdir -p obj)
 
-CFLAGS = -c -Ilibjpeg -MMD
+CFLAGS = -c -Ilibjpeg -MMD -O3
 LDFLAGS =
 LIBJPEG := libjpeg/obj/libjpeg.a
 ODIR = obj
@@ -15,7 +15,7 @@ clean:
 FILES = $(ODIR)/blarghrad.o $(ODIR)/verify.o $(ODIR)/cmdlib.o $(ODIR)/patches.o $(ODIR)/scriplib.o $(ODIR)/threads.o $(ODIR)/lightmap.o $(ODIR)/polylib.o $(ODIR)/bspfile.o $(ODIR)/mathlib.o $(ODIR)/trace.o
 
 $(EXE) : $(FILES)
-	g++ -o $(EXE) $(LDFLAGS) $(FILES) $(LIBJPEG) -lm
+	g++ -pthread -o $(EXE) $(LDFLAGS) $(FILES) $(LIBJPEG) -lm
 
 $(ODIR)/blarghrad.o : blarghrad.cpp
 	g++ $(CFLAGS) $? -o $@
