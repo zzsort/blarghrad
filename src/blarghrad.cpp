@@ -7,6 +7,12 @@
 #include "blarghrad.h"
 //#include "lbmlib.h"
 
+#if defined(_WIN32)
+#include <io.h>
+#elif defined(__linux__)
+#include <dirent.h>
+#endif
+
 extern "C" {
 #include "jpeglib.h"
 }
@@ -36,7 +42,7 @@ int nudgefix = 1;
 int shadowfilter = 1;
 float saturation = 1.0f;
 float stylemin = 1.0f;
-float gamma = 1.0f;
+float g_gamma = 1.0f;
 int iNonTransFaces = 1;
 int iTransFaces = 3;
 float chopsky = 0;
@@ -111,6 +117,48 @@ void NOT_IMPLEMENTED(const char* where) {
 }
 
 
+#if defined(_WIN32)
+
+std::vector<std::string> GetPakFilenames(char* pszCurDir) {
+    std::vector<std::string> result;
+    std::string wildcardPaks = pszCurDir;
+    wildcardPaks += "*.pak";
+
+    _finddata_t finddata;
+    int handle = _findfirst(wildcardPaks.c_str(), &finddata);
+    while (handle != -1) {
+        result.push_back(finddata.name);
+        handle = _findnext(handle, &finddata);
+    }
+    _findclose(handle);
+    return result;
+}
+
+#elif defined(__linux__)
+
+int filterPak(const dirent* de) {
+    const char* lastdot = strrchr(de->d_name, '.');
+    return lastdot && !strcmp(lastdot, ".pak");
+}
+
+std::vector<std::string> GetPakFilenames(char* pszCurDir) {
+    std::vector<std::string> result;
+    dirent** namelist;
+    int n = scandir(pszCurDir, &namelist, filterPak, alphasort);
+    if (n > 0) {
+        for (int i = 0; i < n; i++) {
+            result.push_back(namelist[i]->d_name);
+            free(namelist[i]);
+        }
+        free(namelist);
+    }
+    return result;
+}
+
+#else
+NOT_IMPLEMENTED("GetPakFilenames not implemented for this platform");
+#endif
+
 void LoadPakdirs(void)
 {
     pak_t *ppVar2;
@@ -121,21 +169,17 @@ void LoadPakdirs(void)
     for (int tryGamedirOrModdir = 0; tryGamedirOrModdir <= 1; tryGamedirOrModdir++) {
         pszCurDir = (tryGamedirOrModdir == 0 ? gamedir : moddir);
 
-        char wildcardPaks[1024];
-        sprintf(wildcardPaks, "%s*.pak", pszCurDir);
-
-        _finddata_t finddata;
-        int handle = _findfirst(wildcardPaks, &finddata);
-        while (handle != -1) {
+        std::vector<std::string> pakFilenames = GetPakFilenames(pszCurDir);
+        for (const std::string& name : pakFilenames) {
             pak_t* newpak = (pak_t *)malloc(sizeof(pak_t));
             if (!newpak) {
                 Error("LoadPakdirs: (newpak) malloc failed");
             }
 
-            char filename[1024];
-            sprintf(filename, "%s%s", pszCurDir, finddata.name);
-            FILE* f = SafeOpenRead(filename);
-            strcpy(newpak->pakfile, filename);
+            std::string filename = pszCurDir;
+            filename += name;
+            FILE* f = SafeOpenRead(filename.c_str());
+            strcpy(newpak->pakfile, filename.c_str());
 
             // read pakheader_t
             dpackheader_t header;
@@ -153,7 +197,7 @@ void LoadPakdirs(void)
 
             if (tryGamedirOrModdir == 0) {
                 if (!gamedir_paks ||
-                    (iVar5 = Q_strcasecmp(filename, gamedir_paks->pakfile), ppVar6 = gamedir_paks, 0 < iVar5))
+                    (iVar5 = Q_strcasecmp(filename.c_str(), gamedir_paks->pakfile), ppVar6 = gamedir_paks, 0 < iVar5))
                 {
                     newpak->nextpak = gamedir_paks;
                     gamedir_paks = newpak;
@@ -162,7 +206,7 @@ void LoadPakdirs(void)
                 LAB_0040c456:
                     if (ppVar6) {
                         ppVar2 = ppVar6->nextpak;
-                        while ((ppVar2 && (iVar5 = Q_strcasecmp(filename, (char *)ppVar2), iVar5 < 0))) {
+                        while ((ppVar2 && (iVar5 = Q_strcasecmp(filename.c_str(), (char *)ppVar2), iVar5 < 0))) {
                             ppVar6 = ppVar6->nextpak;
                             ppVar2 = ppVar6->nextpak;
                         }
@@ -173,14 +217,12 @@ void LoadPakdirs(void)
             }
             else {
                 if ((moddir_paks != nullptr) &&
-                    (iVar5 = Q_strcasecmp(filename, moddir_paks->pakfile), ppVar6 = moddir_paks, iVar5 < 1))
+                    (iVar5 = Q_strcasecmp(filename.c_str(), moddir_paks->pakfile), ppVar6 = moddir_paks, iVar5 < 1))
                     goto LAB_0040c456;
                 newpak->nextpak = moddir_paks;
                 moddir_paks = newpak;
             }
-            handle = _findnext(handle, &finddata);
         }
-        _findclose(handle);
     }
 }
 
@@ -792,7 +834,7 @@ void maybe_LoadJPG(const char* filename, byte** bytes, int* width, int* height)
     jpeg_decompress_struct cinfo;
     jpeg_error_mgr err;
     cinfo.err = jpeg_std_error(&err);
-    jpeg_create_decompress(&cinfo, JPEG_LIB_VERSION, sizeof(cinfo));
+    jpeg_create_decompress(&cinfo);
 
     int filelength;
     FILE* f = OpenFileFromDiskOrPak(filename, &filelength);
@@ -1419,24 +1461,17 @@ void MakeTransfers(int i)
 {
     int			j;
     vec3_t		delta;
-    float		trans;
     int			itrans;
-    patch_t		*patch;
     patch_t		*patch2;
-    float		total;
-    dplane_t	plane;
     vec3_t		origin;
     float		transfers[MAX_PATCHES], *all_transfers;
-    int			s;
-    int			itotal;
     byte		pvs[(MAX_MAP_LEAFS + 7) / 8];
-    int			cluster;
 
-    patch = patches + i;
-    total = 0;
+    patch_t* patch = patches + i;
+    float total = 0;
 
     VectorCopy(patch->origin, origin);
-    plane = *patch->plane;
+    dplane_t plane = *patch->plane;
 
     if (!PvsForOrigin(patch->origin, pvs))
         return;
@@ -1476,7 +1511,7 @@ void MakeTransfers(int i)
         // check pvs bit
         if (!nopvs)
         {
-            cluster = patch2->cluster;
+            int cluster = patch2->cluster;
             if (cluster == -1)
                 continue;
             if (!(pvs[cluster >> 3] & (1 << (cluster & 7))))
@@ -1518,7 +1553,7 @@ void MakeTransfers(int i)
             dist = splotch_dist;
         }
 
-        trans = scale * patch2->area / (dist*dist);
+        float trans = scale * patch2->area / (dist*dist);
         if (trans < patch_cutoff)
             continue;
 
@@ -1529,6 +1564,7 @@ void MakeTransfers(int i)
         transfers[j] = trans;
         if (trans > 0)
         {
+            CHKVAL2("MakeTransfers-add-tran", true);
             total += trans;
             patch->numtransfers++;
         }
@@ -1543,7 +1579,7 @@ void MakeTransfers(int i)
     {
         if (patch->numtransfers < 0 || patch->numtransfers > MAX_PATCHES)
             Error("Weird numtransfers");
-        s = patch->numtransfers * sizeof(transfer_t);
+        size_t s = patch->numtransfers * sizeof(transfer_t);
         patch->transfers = (transfer_t*)malloc(s);
         if (!patch->transfers)
             Error("Memory allocation failure");
@@ -1553,16 +1589,15 @@ void MakeTransfers(int i)
         // is transfered to the surroundings
         //
         transfer_t* t = patch->transfers;
-        itotal = 0;
-        for (j = 0; j < num_patches; j++)
-        {
-            if (transfers[j] <= 0)
-                continue;
-            itrans = sqrt(transfers[j] / total) * 0x10000;
-            itotal += itrans;
-            t->transfer = itrans;
-            t->patch = j;
-            t++;
+        int itotal = 0;
+        for (j = 0; j < num_patches; j++) {
+            if (transfers[j] > 0) {
+                itrans = sqrt(transfers[j] / total) * 0x10000;
+                itotal += itrans;
+                t->transfer = itrans;
+                t->patch = j;
+                t++;
+            }
         }
     }
 
@@ -1753,7 +1788,6 @@ void BuildFacelights(int facenum)
     lightinfo_t	l[5];
     vec3_t		*styletable[MAX_LSTYLES];
     int			i, j;
-    float		*spot;
     patch_t		*patch;
     int			numsamples;
     int			tablesize;
@@ -2614,7 +2648,6 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
     vec3_t			delta;
     float			dot, dot2;
     float			dist;
-    float			*dest;
 
     CHKVAL2("GatherSampleLight-pos", pos);
     CHKVAL2("GatherSampleLight-realpt", realpt);
@@ -2969,6 +3002,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                         if (g_sky_ambient == 0) {
                             break;
                         }
+                        CHKVAL2("GSL-sun-has-ambient", true);
                         if (local_215c) {
                             break;
                         }
@@ -2976,9 +3010,11 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                             local_2160 = TestLine_shadow(l->m_origin, pos, nullptr, &local_216c);
                             bVar6 = true;
                         }
+                        CHKVAL2("GSL-sun-check-2160", true);
                         if (local_2160 == 0) {
                             local_2158 = g_sky_ambient;
                             local_215c = l;
+                            CHKVAL2("GSL-set-sun-dl", true);
                         }
 
                     }
@@ -3063,7 +3099,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
         }
     }
 
-
+    CHKVAL2("GSL-final-suns", true);
     for (int i = 0; i < 9; i++) {
         suninfo_t* sun = &the_9_suns[i];
         if (!sun->bool_maybe_sun_is_active) {
@@ -3139,7 +3175,8 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
 
 
     if (local_215c != nullptr) {
-        vec3_t* pstyle = styletable[offset];
+        vec3_t* pstyle = styletable[0] + offset;
+        CHKVAL2("GSL-pstyle", *pstyle);
         vec3_t* val = nullptr;
         if (vec3_t_021d98b0.x != 0 || vec3_t_021d98b0.y != 0 || vec3_t_021d98b0.z != 0) {
             VectorMA(*pstyle, (local_2158 * lightscale), vec3_t_021d98b0, *pstyle);
@@ -3158,7 +3195,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                     VectorMA(local_2190, sun->light, *val, local_2190);
                 }
             }
-            if (local_2190.x == 0 || local_2190.y == 0 || local_2190.z == 0) {
+            if (local_2190.x != 0 || local_2190.y != 0 || local_2190.z != 0) {
                 ColorNormalize(local_2190, local_2190);
                 VectorMA(*pstyle, (double)(local_2158 * lightscale), local_2190, *pstyle);
                 val = &local_2190;
@@ -3303,7 +3340,7 @@ int main(int argc, char **argv)
 
         double start = I_FloatTime();
 
-        if (gamedir == '\0') {
+        if (*gamedir == '\0') {
             SetQdirFromPath_v2(argv[i]);
         }
         if (game == 0) {
@@ -3315,7 +3352,7 @@ int main(int argc, char **argv)
         printf("----- Load BSP File -----\n");
 
         char bsp_filename[1036];
-        sprintf(bsp_filename, "%s%s", szTempIn, &source);
+        sprintf(bsp_filename, "%s%s", szTempIn, source);
         printf("reading %s\n", bsp_filename);
         LoadBSPFile(bsp_filename);
         ParseEntities();
@@ -3341,7 +3378,7 @@ int main(int argc, char **argv)
             RunThreadsOn(numfaces, true, UpdateLightmaps);
         }
         printf("----- Save BSP File -----\n");
-        sprintf(bsp_filename, "%s%s", szTempOut, &source);
+        sprintf(bsp_filename, "%s%s", szTempOut, source);
         printf("writing %s\n", bsp_filename);
         WriteBSPFile(bsp_filename);
         printf("----- Time -----\n");
@@ -3353,7 +3390,7 @@ int main(int argc, char **argv)
 LAB_PROCESS_NEXT_ARG:
     if (!strcmp(argv[i], "-?") ||
         !strcmp(argv[i], "-help")) {
-        printf(usage);
+        puts(usage);
         return 0;
     }
 
@@ -3538,11 +3575,11 @@ LAB_PROCESS_NEXT_ARG:
         goto LAB_CONTINUE;
     }
     if (!strcmp(argv[i], "-gamma")) {
-        gamma = atof(argv[i + 1]);
-        if (gamma <= 0) {
-            gamma = 1.f;
+        g_gamma = atof(argv[i + 1]);
+        if (g_gamma <= 0) {
+            g_gamma = 1.f;
         }
-        printf(" -gamma set to %.3f  (gamma compensation)\n", gamma);
+        printf(" -gamma set to %.3f  (gamma compensation)\n", g_gamma);
         i += 1;
         goto LAB_CONTINUE;
     }

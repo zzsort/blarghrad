@@ -226,7 +226,7 @@ extern int onlybounce;
 extern int _nocolor_maybe_unweighted;
 extern float saturation;
 extern float lightscale;
-extern float gamma;
+extern float g_gamma;
 extern float maxlight;
 extern float minlight;
 

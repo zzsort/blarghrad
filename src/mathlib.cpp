@@ -60,9 +60,9 @@ vec_t Q_rint(vec_t in)
 
 void VectorMA(const vec3_t& ofs, double scale, const vec3_t& val, vec3_t& out)
 {
-    CHKVAL("VectorMA-ofs", ofs);
-    CHKVAL("VectorMA-scale", (float)scale);
-    CHKVAL("VectorMA-val", val);
+    CHKVAL2("VectorMA-ofs", ofs);
+    CHKVAL2("VectorMA-scale", (float)scale);
+    CHKVAL2("VectorMA-val", val);
 
     out.x = val.x * scale + ofs.x;
     out.y = val.y * scale + ofs.y;
@@ -113,18 +113,16 @@ void _VectorScale(vec3_t v, vec_t scale, vec3_t& out)
 
 vec_t VectorNormalize(vec3_t in, vec3_t& out)
 {
-    double	length, ilength;
-
     CHKVAL2("VectorNormalize-in", in);
 
-    length = sqrt(in.x*in.x + in.y*in.y + in.z*in.z);
+    float length = sqrt(in.x*in.x + in.y*in.y + in.z*in.z);
     if (length == 0)
     {
         VectorClear(out);
         return 0;
     }
 
-    ilength = 1.0 / length;
+    float ilength = 1.0 / length;
     out.x = in.x * ilength;
     out.y = in.y * ilength;
     out.z = in.z * ilength;

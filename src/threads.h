@@ -19,13 +19,11 @@ along with Quake 2 Tools source code; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
-
+#pragma once
 extern	int		numthreads;
+extern std::mutex threadMutex;
 
 void ThreadSetDefault (void);
 int	GetThreadWork (void);
 void RunThreadsOnIndividual (int workcnt, qboolean showpacifier, void(*func)(int));
 void RunThreadsOn (int workcnt, qboolean showpacifier, void(*func)(int));
-void ThreadLock (void);
-void ThreadUnlock (void);
-

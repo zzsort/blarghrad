@@ -30,11 +30,13 @@ bool NextData(const char* name);
 
 extern bool chk_on;
 extern char rawline[1024];
+extern int progress;
 
 #define CHKVAL_IMPL(name,val) \
 { \
-    if(chk_on) { \
-        printf("argh:%s\n",rawline); \
+    if (chk_on) { \
+        progress++; \
+        printf("%.4x:argh:%s\n", progress, rawline); \
         if (!NextData(name) || !CheckVal(val)) { \
             BREAK \
         } \

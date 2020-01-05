@@ -1,4 +1,3 @@
-#pragma once
 #include "pch.h"
 #include "bspfile.h"
 #include "cmdlib.h"
@@ -607,7 +606,7 @@ void SampleTriangulation(const vec3_t& point, triangulation_t *trian, vec3_t& co
     triedge_t	*e, *beste = nullptr;
     vec_t		d, d2, best;
     patch_t		*p0, *p1;
-    vec3_t		v1, v2;
+    vec3_t		v1;
     int			i, j;
 
     CHKVAL2("SampleTriangulation-point", point);
@@ -1163,7 +1162,7 @@ lighting and save into final map format
 void FinalLightFace(int facenum)
 {
     dface_t		*f;
-    int			i, j, k, st;
+    int			i, k;
     vec3_t		lb;
     patch_t		*patch;
     triangulation_t	*trian = nullptr;
@@ -1171,7 +1170,6 @@ void FinalLightFace(int facenum)
     float		local_minlight;
     float		max, newmax;
     byte		*dest;
-    int			pfacenum;
     vec3_t		facemins, facemaxs;
 
     CHKVAL("FinalLightFace-facenum", facenum);
@@ -1190,20 +1188,21 @@ void FinalLightFace(int facenum)
 
     // texture is lit
 
-    ThreadLock();
-    f->lightofs = lightdatasize;
-    lightdatasize += fl->numstyles*(fl->numsamples * 3);
+    {
+        std::lock_guard<std::mutex> lock(threadMutex);
+        f->lightofs = lightdatasize;
+        lightdatasize += fl->numstyles*(fl->numsamples * 3);
 
-// add green sentinals between lightmaps
+        // add green sentinals between lightmaps
 #if 0
-    lightdatasize += 64 * 3;
-    for (i = 0; i < 64; i++)
-        dlightdata[lightdatasize - (i + 1) * 3 + 1] = 255;
+        lightdatasize += 64 * 3;
+        for (i = 0; i < 64; i++)
+            dlightdata[lightdatasize - (i + 1) * 3 + 1] = 255;
 #endif
 
-    if (lightdatasize > MAX_MAP_LIGHTING)
-        Error("MAX_MAP_LIGHTING");
-    ThreadUnlock();
+        if (lightdatasize > MAX_MAP_LIGHTING)
+            Error("MAX_MAP_LIGHTING");
+    }
 
     f->styles[0] = 0;
     f->styles[1] = f->styles[2] = f->styles[3] = 0xff;
@@ -1408,10 +1407,10 @@ void FinalLightFace(int facenum)
 
             VectorScale(lb, lightscale, lb);
 
-            if (gamma != 1) {
-                lb.x = pow(lb.x / 255.f, 1 / gamma) * 255.f;
-                lb.y = pow(lb.y / 255.f, 1 / gamma) * 255.f;
-                lb.z = pow(lb.z / 255.f, 1 / gamma) * 255.f;
+            if (g_gamma != 1) {
+                lb.x = pow(lb.x / 255.f, 1 / g_gamma) * 255.f;
+                lb.y = pow(lb.y / 255.f, 1 / g_gamma) * 255.f;
+                lb.z = pow(lb.z / 255.f, 1 / g_gamma) * 255.f;
             }
 
             // we need to clamp without allowing hue to change

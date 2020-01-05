@@ -6,7 +6,6 @@
 #include <ctype.h>
 #include <time.h>
 #include <stdarg.h>
-#include <io.h>
 #include <math.h>
 
 #ifndef __BYTEBOOL__
@@ -17,10 +16,9 @@ typedef unsigned char byte;
 
 #include <algorithm>
 #include <atomic>
-
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+#include <vector>
+#include <thread>
+#include <mutex>
 
 class qboolean final {
 public:

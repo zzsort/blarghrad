@@ -35,6 +35,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <direct.h>
 #endif
 
+#ifdef __linux__
+#include <unistd.h>
+#endif
+
 #pragma warning(disable : 4996)
 
 #ifdef NeXT
@@ -62,6 +66,7 @@ ExpandWildcards
 Mimic unix command line expansion
 ===================
 */
+/*
 #define	MAX_EX_ARGC	1024
 int		ex_argc;
 char	*ex_argv[MAX_EX_ARGC];
@@ -110,6 +115,7 @@ void ExpandWildcards(int *argc, char ***argv)
 {
 }
 #endif
+*/
 
 #ifdef WIN_ERROR
 /*
@@ -194,7 +200,7 @@ void SetQdirFromPath_ORIGINAL(char *path)
 {
     char	temp[1024];
     char	*c;
-    int		len;
+    size_t  len;
 
     if (!(path[0] == '/' || path[0] == '\\' || path[1] == ':'))
     {	// path is partial
@@ -246,7 +252,7 @@ void SetQdirFromPath_v2(char *path)
     }
     pcVar7 = path + strlen(path) - 1;
     if (pcVar7 != path) {
-        _Count = pcVar7 + (1 - (int)path);
+        _Count = pcVar7 + (1 - (size_t)path);
         while ((*pcVar7 != '/' && *pcVar7 != '\\')) {
             pcVar7--;
             _Count++;
@@ -261,9 +267,9 @@ void SetQdirFromPath_v2(char *path)
                     strcat(local_400, pcVar10);
 
                     // try changing to the directory...
-                    if (!_chdir(local_400)) {
+                    if (!chdir(local_400)) {
                         game = local_424 / 2 + 1;
-                        strncpy(qdir, path, (size_t)(pcVar7 + (1 - (int)path)));
+                        strncpy(qdir, path, (size_t)(pcVar7 + (1 - (size_t)path)));
                         strcpy(gamedir, qdir);
                         strcat(gamedir, pcVar10);
                         printf(" gamedir: %s\n", gamedir);
@@ -276,7 +282,7 @@ void SetQdirFromPath_v2(char *path)
 LAB_00402654:
     pcVar7 = path + strlen(path) - 1;
     if (pcVar7 != path) {
-        _Count = pcVar7 + (1 - (int)path);
+        _Count = pcVar7 + (1 - (size_t)path);
         do {
             if ((*pcVar7 == '/') || (*pcVar7 == '\\')) {
                 iVar4 = 0;
@@ -285,11 +291,11 @@ LAB_00402654:
                         strncpy(local_400, path, (size_t)_Count);
                         strcat(local_400, local_418[iVar4]);
                         
-                        if (!_chdir(local_400)) {
+                        if (!chdir(local_400)) {
                             game = iVar4 / 2 + 1;
-                            strncpy(qdir, path, (size_t)(pcVar7 + (1 - (int)path)));
+                            strncpy(qdir, path, (size_t)(pcVar7 + (1 - (size_t)path)));
                             strcpy(gamedir, local_400);
-                            printf(" gamedir: %s\n", &gamedir);
+                            printf(" gamedir: %s\n", gamedir);
                             if (*pcVar7 == '\0') {
                                 return;
                             }
@@ -301,8 +307,8 @@ LAB_00402654:
                                     return;
                                 }
                             }
-                            strncpy(moddir, path, (size_t)(pcVar7 + (1 - (int)path)));
-                            printf("  moddir: %s\n", &moddir);
+                            strncpy(moddir, path, (size_t)(pcVar7 + (1 - (size_t)path)));
+                            printf("  moddir: %s\n", moddir);
                             return;
                         }
                     }
@@ -414,10 +420,10 @@ double I_FloatTime(void)
 void Q_getwd(char *out)
 {
 #ifdef _WIN32
-    _getcwd(out, 256);
+    getcwd(out, 256);
     strcat(out, "\\");
 #else
-    _getwd(out);
+    getcwd(out, 256);
     strcat(out, "/");
 #endif
 }
@@ -536,7 +542,7 @@ skipwhite:
 }
 
 
-int Q_strncasecmp(const char *s1, const char *s2, int n)
+int Q_strncasecmp(const char *s1, const char *s2, size_t n)
 {
     int		c1, c2;
 
@@ -801,9 +807,7 @@ void DefaultPath(char *path, const char *basepath)
 
 void    StripFilename(char *path)
 {
-    int             length;
-
-    length = strlen(path) - 1;
+    size_t length = strlen(path) - 1;
     while (length > 0 && path[length] != PATHSEPERATOR)
         length--;
     path[length] = 0;
@@ -811,9 +815,7 @@ void    StripFilename(char *path)
 
 void    StripExtension(char *path)
 {
-    int             length;
-
-    length = strlen(path) - 1;
+    size_t length = strlen(path) - 1;
     while (length > 0 && path[length] != '.')
     {
         length--;

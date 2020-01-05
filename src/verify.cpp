@@ -10,6 +10,7 @@ FILE *f;
 bool chk_on = true;
 bool chk_ignore;
 char rawline[1024];
+int progress = 0;
 
 void InitVerification() {
     f = fopen("dbglog.txt", "r");
@@ -31,7 +32,7 @@ bool NextLine() {
     bool result = fgets(rawline, _countof(rawline), f);
     if (!result) {
         printf("unexpected EOF\n");
-        system("pause");
+        BREAK;
     }
     else {
         rawline[strcspn(rawline, "\r\n")] = 0;
@@ -49,7 +50,7 @@ bool NextData(const char* name) {
     while (NextLine()) {
         int c = sscanf(rawline, "%7s%99s", data, dataname);
         if (c >= 1 && !strcmp(data, "!data")) {
-            printf("argh:%s\n", rawline);
+            printf("%.4x:argh:%s\n", progress, rawline);
             if (c == 2 && !strcmp(name, dataname))
                 return NextLine();
             if (c == 1)
