@@ -25,3 +25,23 @@ The main tools used were Ghidra, Ida and windbg. The process of creating the ini
 - The ghidra decompiler likes to omit small patches of code, especially FPU code, so it is likely that some code is missing and needs to be found.
 - Most conditional expressions using the FPU were decompiled by hand so I probably got some wrong.
 - Larger functions are more likely to have bugs because they usually had lower quality decompilation results.
+
+## Building on linux:
+Depends on g++, gcc, and make.
+
+Build the jpeg support library (only need to do this once):
+```
+cd src/libjpeg
+make
+```
+
+Build arghrad from the src directory:
+```
+make
+```
+
+Clean build from src (this does not rebuild libjpeg):
+```
+make clean
+make
+```
