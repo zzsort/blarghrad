@@ -3694,8 +3694,12 @@ LAB_PROCESS_NEXT_ARG:
         sprintf(gamedir, "%s", argv[i + 1]);
 
         if (strlen(gamedir) > 0) {
-            if (gamedir[strlen(gamedir) - 1] != '\\') {
+            if (gamedir[strlen(gamedir) - 1] != '\\' && gamedir[strlen(gamedir) - 1] != '/') {
+#if defined(_WIN32)
                 strcat(gamedir, "\\");
+#else
+                strcat(gamedir, "/");
+#endif
             }
         }
         printf(" -gamedir set to %s  (game pak dir)\n", gamedir);
@@ -3706,8 +3710,12 @@ LAB_PROCESS_NEXT_ARG:
         sprintf(moddir, "%s", argv[i + 1]);
 
         if (strlen(moddir) > 0) {
-            if (moddir[strlen(moddir) - 1] != '\\') {
+            if (moddir[strlen(moddir) - 1] != '\\' && moddir[strlen(moddir) - 1] != '/') {
+#if defined(_WIN32)
                 strcat(moddir, "\\");
+#else
+                strcat(moddir, "/");
+#endif
             }
         }
         printf(" -moddir set to %s  (mod pak dir)\n", moddir);

@@ -43,6 +43,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <time.h>
 #include <stdarg.h>
 
+#if defined(_WIN32)
+#define PATHSEPARATOR   '\\'
+#else
+#define PATHSEPARATOR   '/'
+#endif
 
 // the dec offsetof macro doesnt work very well...
 #define myoffsetof(type,identifier) ((size_t)&((type *)0)->identifier)
@@ -87,8 +92,6 @@ void	SaveFile(const char *filename, void *buffer, int count);
 qboolean	FileExists(const char *filename);
 
 void 	DefaultExtension(char *path, const char *extension);
-void 	DefaultPath(char *path, const char *basepath);
-void 	StripFilename(char *path);
 void 	StripExtension(char *path);
 
 void 	ExtractFilePath(char *path, char *dest);
