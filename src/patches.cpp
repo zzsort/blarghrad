@@ -236,6 +236,7 @@ void maybePhongSomething(int facenum, const vec3_t& center, const vec3_t& plane_
         mins.data[local_EBP_165] = ftmp2;
 
         pdVar13 = local_98;
+        local_98 = local_EBP_165;
     }
     CHKVAL("maybePhongSomething-mins", mins);
     CHKVAL("maybePhongSomething-maxs", maxs);

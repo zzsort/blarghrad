@@ -17,7 +17,6 @@ The main tools used were Ghidra, Ida and windbg. The process of creating the ini
 - The -update flag is not implemented yet.
 - Performance test.
 - Test sunlight, all command args and entity options.
-- On abandon.bsp: a few barrels have dark spots, and there is a dark plant model.
 
 ## Possible bugs to look for:
 
