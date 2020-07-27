@@ -2577,7 +2577,15 @@ void CreateDirectLights()
         if (patch->cluster == -1) {
             continue;
         }
-        if (abs(patch->totallight.x) < 1 && abs(patch->totallight.y) < 1 && abs(patch->totallight.z) < 1) {
+
+        dface_t* face = dfaces + patch->facenum;
+
+        if (
+            // No light in patch
+            abs(patch->totallight.x) < 1 && abs(patch->totallight.y) < 1 && abs(patch->totallight.z) < 1 &&
+            // Not a sky
+            ((texinfo[face->texinfo].flags & SURF_SKY) == 0)
+            ) {
             continue;
         }
 
@@ -2589,7 +2597,7 @@ void CreateDirectLights()
         }
         *dl = {};
 
-        dl->m_face = dfaces + patch->facenum;
+        dl->m_face = face;
         VectorCopy(patch->origin, dl->m_origin);
         dl->m_next = directlights[patch->cluster];
         directlights[patch->cluster] = dl;
