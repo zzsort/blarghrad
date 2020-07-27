@@ -125,10 +125,13 @@ std::vector<std::string> GetPakFilenames(char* pszCurDir) {
     wildcardPaks += "*.pak";
 
     _finddata_t finddata;
-    int handle = _findfirst(wildcardPaks.c_str(), &finddata);
-    while (handle != -1) {
-        result.push_back(finddata.name);
-        handle = _findnext(handle, &finddata);
+    intptr_t handle = _findfirst(wildcardPaks.c_str(), &finddata);
+    if (handle != -1) {
+        do
+        {
+            result.push_back(finddata.name);
+        }
+        while (_findnext(handle, &finddata) == 0);
     }
     _findclose(handle);
     return result;
