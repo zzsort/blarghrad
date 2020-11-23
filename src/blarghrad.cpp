@@ -3080,7 +3080,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                         suninfo_t* sun = &the_9_suns[j];
                         if ((sun->bool_maybe_sun_is_active != 0) && (sun->style == 0)) {
                         
-                            vec3_t& color = (sun->color.x || sun->color.y || sun->color.z == 0) ? sun->color : l->m_color;
+                            vec3_t& color = (sun->color.x || sun->color.y || sun->color.z) ? sun->color : l->m_color;
                             VectorMA(local_2184, sun->light, color, local_2184);
                         }
                     }
