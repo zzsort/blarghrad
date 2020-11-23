@@ -168,12 +168,12 @@ void maybePhongSomething(int facenum, const vec3_t& center, const vec3_t& plane_
 
     VectorCopy(plane_normal, out_vec_param_4);
     if (nocurve) {
-        CHKVAL("maybePhongSomething-ret3", true);
+        CHKVAL2("maybePhongSomething-ret3", true);
         return;
     }
     short sVar7 = dfaces[facenum].texinfo;
     if ((texinfo[sVar7].flags & SURF_CURVE) == 0) {
-        CHKVAL("maybePhongSomething-ret3", true);
+        CHKVAL2("maybePhongSomething-ret3", true);
         return;
     }
     switch (dplanes[dfaces[facenum].planenum].type) {
@@ -344,26 +344,30 @@ void maybePhongSomething(int facenum, const vec3_t& center, const vec3_t& plane_
         } while (local_90 < dfaces[facenum].numedges);
     }
 
-    CHKVAL("maybePhongSomething-lastif", true);
+    CHKVAL2("maybePhongSomething-lastif", true);
 
     if (local_90 != dfaces[facenum].numedges) {
-        CHKVAL("maybePhongSomething-lastif2", local_30);
-        CHKVAL("maybePhongSomething-lastif2", local_48);
+        CHKVAL2("maybePhongSomething-lastif2", local_30);
+        CHKVAL2("maybePhongSomething-lastif2", local_48);
 
         if (local_48.data[pdVar13] != local_30.data[pdVar13]) {
-            CHKVAL("maybePhongSomething-lastif3", afStack96);
-            CHKVAL("maybePhongSomething-lastif3", local_18);
+            CHKVAL2("maybePhongSomething-lastif3", afStack96);
+            CHKVAL2("maybePhongSomething-lastif3", local_18);
 
             if (afStack96.data[pdVar13] != local_18.data[pdVar13]) {
 
-                CHKVAL("local_30", local_30);
-                CHKVAL("local_48", local_48);
+                CHKVAL2("local_30", local_30);
+                CHKVAL2("local_48", local_48);
 
                 float fVar3 = ((local_48.data[pdVar13] - *pfVar2) / (local_48.data[pdVar13] - local_30.data[pdVar13]));
-                CHKVAL("local_a0", fVar3);
+                CHKVAL2("local_a0", fVar3);
                 VectorScale(local_3c, (1 - fVar3), mins);
                 VectorMA(mins, (double)fVar3, local_area, mins);
+
+                CHKVAL2("local_98", int(local_98 * sizeof(int)));
                 fVar3 = local_48.data[local_98] - (local_48.data[local_98] - local_30.data[local_98]) * fVar3;
+                CHKVAL2("fVar3-1", fVar3);
+
                 float fVar4 = ((afStack96.data[pdVar13] - *pfVar2) / (afStack96.data[pdVar13] - local_18.data[pdVar13]));
                 VectorScale(local_54, (1 - fVar4), maxs);
                 VectorMA(maxs, (double)fVar4, local_c, maxs);
@@ -379,7 +383,7 @@ void maybePhongSomething(int facenum, const vec3_t& center, const vec3_t& plane_
             }
         }
     }
-    CHKVAL("maybePhongSomething-ret3", true);
+    CHKVAL2("maybePhongSomething-ret3", true);
 }
 
 /*
@@ -405,7 +409,7 @@ void MakePatchForFace(int fn, winding_t *w, entity_t* ent)
         area = 0;
     }
     totalarea += area;
-    CHKVAL("MakePatchForFace", totalarea);
+    CHKVAL2("MakePatchForFace", totalarea);
 
     patch_t* patch = &patches[num_patches];
     if (num_patches == MAX_PATCHES)
@@ -593,7 +597,7 @@ void MakePatches(void)
             }
         }
 
-        CHKVAL("MakePatches-numfaces", mod->numfaces);
+        CHKVAL2("MakePatches-numfaces", mod->numfaces);
         for (int j = 0; j < mod->numfaces; j++)
         {
             int fn = mod->firstface + j;

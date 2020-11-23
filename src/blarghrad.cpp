@@ -1528,16 +1528,24 @@ void MakeTransfers(int i)
             continue;	// should never happen
 
         // relative angles
+        CHKVAL2("MakeTransfers-rel-ang", true);
         float p1_scale = DotProduct(delta, patch->normal);
         if (bouncefix) {
             if (p1_scale < 0.f) {
+                CHKVAL2("MakeTransfers-rel-ang-skip", true);
                 continue;
             }
+            CHKVAL2("MakeTransfers-rel-ang-skip", false);
         }
+
         float p2_scale = -DotProduct(delta, patch2->normal);
         float scale = p2_scale * p1_scale;
-        if (scale <= 0)
+        if (scale <= 0) {
+            CHKVAL2("MakeTransfers-scale-skip", true);
             continue;
+        } else {
+            CHKVAL2("MakeTransfers-scale-skip", false);
+        }
 
         if (splotchfix && dist < splotch_dist) {
             /*
@@ -1559,18 +1567,23 @@ void MakeTransfers(int i)
         float trans = scale * patch2->area / (dist*dist);
         if (trans < patch_cutoff)
             continue;
+        CHKVAL2("MakeTransfers-cutoff-pass", true);
 
         // check exact transfer
         if (TestLine_shadow(patch->origin, patch2->origin, nullptr, nullptr))
             continue;
+        CHKVAL2("MakeTransfers-testline-pass", true);
 
         transfers[j] = trans;
-        if (trans > 0)
+        if (!(trans <= 0))
         {
             CHKVAL2("MakeTransfers-add-tran", true);
             total += trans;
             patch->numtransfers++;
         }
+        else {
+            CHKVAL2("MakeTransfers-add-tran", false);
+    }
     }
 
     // copy the transfers out and normalize
@@ -1594,7 +1607,7 @@ void MakeTransfers(int i)
         transfer_t* t = patch->transfers;
         int itotal = 0;
         for (j = 0; j < num_patches; j++) {
-            if (transfers[j] > 0) {
+            if (!(transfers[j] <= 0)) {
                 itrans = sqrt(transfers[j] / total) * 0x10000;
                 itotal += itrans;
                 t->transfer = itrans;
@@ -3230,7 +3243,6 @@ void maybe_free_shadows()
     }
 }
 
-
 void RadWorld()
 {
     if ((numnodes == 0) || (numfaces == 0)) {
@@ -3243,6 +3255,7 @@ void RadWorld()
         maybeInitPhong();
     }
 
+    CHK_ENABLE();
     BuildFaceGroups();
 
     // turn each face into a single patch
@@ -3251,7 +3264,6 @@ void RadWorld()
     // subdivide patches to a maximum dimension
     SubdividePatches();
 
-    CHK_ENABLE();
 
     // create directlights out of patches and lights
     CreateDirectLights();
@@ -3330,10 +3342,7 @@ int main(int argc, char **argv)
             choplight = subdiv;
             chopsky = subdiv;
             chopwarp = subdiv;
-            if (subdiv >= 32)
-                chopcurve = 32;
-            else
-                chopcurve = subdiv;
+            chopcurve = std::max(32.f, subdiv);
         }
 
         if (i != argc - 1) {
