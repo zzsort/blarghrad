@@ -3371,7 +3371,8 @@ int main(int argc, char **argv)
         if (!onlyupdate) {
             MakeShadowModels();
             if (g_texscale == 0) {
-                g_texscale = (game == 1 ? 2.0f : 1.0f);
+                //original: g_texscale = (game == 1 ? 2.0f : 1.0f);
+                g_texscale = 1;
             }
             CalcTextureReflectivityMain();
             if (visdatasize == 0) {
