@@ -2220,8 +2220,6 @@ void CreateDirectLights()
     float fVar23;
     int num_surface_lights;
     int num_entity_lights;
-    float local_50;
-    float local_4c;
     char key_prefix[12];
     char local_28[36];
 
@@ -2297,11 +2295,12 @@ void CreateDirectLights()
                     pcVar4 = ValueForKey(ent, local_28);
                     if (*pcVar4 != '\0') {
                     LAB_00407f20:
-                        sscanf(pcVar4, "%f %f", &local_4c, &local_50);
-                        fVar21 = cos(local_50 * Q_PI / 180);
-                        the_9_suns[i].direction.x = fVar21 * cos(local_4c * Q_PI / 180);
-                        the_9_suns[i].direction.y = fVar21 * sin(local_4c * Q_PI / 180);
-                        the_9_suns[i].direction.z = sin(local_50 * Q_PI / 180);
+                        float yaw = 0, pitch = 0;
+                        sscanf(pcVar4, "%f %f", &yaw, &pitch);
+                        float cospitch = cos(pitch * Q_PI / 180);
+                        the_9_suns[i].direction.x = cospitch * cos(yaw * Q_PI / 180);
+                        the_9_suns[i].direction.y = cospitch * sin(yaw * Q_PI / 180);
+                        the_9_suns[i].direction.z = sin(pitch * Q_PI / 180);
                         VectorNormalize(the_9_suns[i].direction, the_9_suns[i].direction);
                         goto LAB_00407fd9;
                     }
@@ -2372,6 +2371,8 @@ void CreateDirectLights()
                 }
             }
         }
+
+        const char* mangle_value = "";
         if (!strcmp(name, "light")) {
             numdlights++;
             dl = (directlight_t *)malloc(sizeof(directlight_t));
@@ -2475,7 +2476,7 @@ void CreateDirectLights()
                 dl->m_focus = 0.f;
             }
             targetname = ValueForKey(ent, "target");
-            const char* mangle_value = ValueForKey(ent, "_spotangle");
+            mangle_value = ValueForKey(ent, "_spotangle");
             if (*mangle_value == '\0') {
                 mangle_value = ValueForKey(ent, "_mangle");
             }
