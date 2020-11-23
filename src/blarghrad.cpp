@@ -2419,17 +2419,16 @@ void CreateDirectLights()
             }
             targetname = ValueForKey(ent, "_falloff");
             if (*targetname == 0) {
-                dl->m_falloff = 0;
+                dl->m_falloff = Falloff::Linear;
             }
             else {
-                iVar11 = atoi(targetname);
-                dl->m_falloff = iVar11;
+                dl->m_falloff = static_cast<Falloff>(atoi(targetname));
             }
-            if ((dl->m_falloff < 0) || (2 < dl->m_falloff)) {
-                dl->m_falloff = 0;
+            if (dl->m_falloff < Falloff::MinValue || dl->m_falloff > Falloff::MaxValue) {
+                dl->m_falloff = Falloff::Linear;
             }
             dl->m_distance = 1.f;
-            if (dl->m_falloff == 0) {
+            if (dl->m_falloff == Falloff::Linear) {
                 pcVar4 = ValueForKey(ent, "_fade");
                 if (((*pcVar4 != '\0') || (pcVar4 = ValueForKey(ent, "wait"), *pcVar4 != '\0')) ||
                     (pcVar4 = ValueForKey(ent, "_wait"), *pcVar4 != '\0')) {
@@ -2441,7 +2440,7 @@ void CreateDirectLights()
             }
             pcVar4 = ValueForKey(ent, "_distance");
             if (*pcVar4 != '\0') {
-                if (dl->m_falloff == 0) {
+                if (dl->m_falloff == Falloff::Linear) {
                     dl->m_distance = dl->m_intensity / atof(pcVar4);
                 }
                 else {
@@ -2736,7 +2735,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                         // original:
                         //scale = (l->intensity - dist) * dot;
 
-                        if (l->m_falloff == 0) {
+                        if (l->m_falloff == Falloff::Linear) {
                             if (l->m_distance != 1) {
                                 dist *= l->m_distance;
                             }
@@ -2754,7 +2753,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                             dot = (1.f - l->m_angwait) + dot * l->m_angwait; // dot=>local_res0
                         }
 
-                        if (l->m_falloff == 0) {
+                        if (l->m_falloff == Falloff::Linear) {
                             if (l->m_intensity >= 0) {
                                 scale = (l->m_intensity - dist) * dot;
                             }
@@ -2762,13 +2761,12 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                                 scale = (dist + l->m_intensity) * dot;
                             }
                         }
+                        else if (l->m_falloff == Falloff::Inverse) {
+                            scale = l->m_intensity / dist * dot;
+                        }
                         else {
-                            if (l->m_falloff == 1) {
-                                scale = l->m_intensity / dist * dot;
-                            }
-                            else {
-                                scale = l->m_intensity / (dist * dist) * dot;
-                            }
+                            //Falloff::InverseSquare
+                            scale = l->m_intensity / (dist * dist) * dot;
                         }
                     }
                     break;
@@ -2841,7 +2839,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                     break;
                 case emit_spotlight: // case 2
                     {
-                        if (l->m_falloff == 0) {
+                        if (l->m_falloff == Falloff::Inverse) {
                             if (l->m_distance != 1) {
                                 dist *= l->m_distance;
                             }
@@ -2872,7 +2870,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                         }
                         CHKVAL2("GSL-spotlight-dot", dot);
 
-                        if (l->m_falloff == 0) {
+                        if (l->m_falloff == Falloff::Linear) {
                             if (l->m_intensity >= 0) {
                                 scale = (l->m_intensity - dist) * fVar3 * dot;
                             }
@@ -2880,10 +2878,11 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                                 scale = (dist + l->m_intensity) * fVar3 * dot;
                             }
                         }
-                        else if (l->m_falloff == 1) {
+                        else if (l->m_falloff == Falloff::Inverse) {
                             scale = (l->m_intensity / dist) * fVar3 * dot;
                         }
                         else {
+                            //Falloff::InverseSquare
                             scale = (l->m_intensity / (dist * dist)) * fVar3 * dot;
                         }
                     }

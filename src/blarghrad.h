@@ -51,6 +51,14 @@ struct shadowmodel_t {
     int transFaces; // this field must immediately follow nonTransFaces!
 };
 
+enum class Falloff {
+    Linear = 0,
+    MinValue = Linear,
+    Inverse,
+    InverseSquare,
+    MaxValue = InverseSquare
+};
+
 struct directlight_t {
     struct directlight_t * m_next;
     int m_emittype; /* 0,1,2,3 */
@@ -63,7 +71,7 @@ struct directlight_t {
     float m_distance;
     float m_angwait;
     float m_focus;
-    int m_falloff;
+    Falloff m_falloff;
     dface_t* m_face;
     float m_cap;
     int m_bounce;
