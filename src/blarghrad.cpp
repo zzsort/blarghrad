@@ -17,6 +17,10 @@ extern "C" {
 #include "jpeglib.h"
 }
 
+// [slipyx] add png support
+#define CUTE_PNG_IMPLEMENTATION
+#include "cute_png.h"
+
 // GLOBALS
 vec3_t ambient = { 0, 0, 0 };
 int game = 0;
@@ -770,24 +774,28 @@ void LoadTGA(char *name, byte **pixels, int *width, int *height)
     fclose(fin);
 }
 
-int TryLoadTGA(int txnum)
+// [slipyx] load rgba PNG data using cute_png
+void LoadPNG(char *name, byte **pixels, int *width, int *height)
 {
-    char filename[1024];
+    int pnglen = 0;
+    FILE* pngfile = OpenFileFromDiskOrPak(name, &pnglen);
+    if (!pngfile)
+        pngfile = fopen(name, "rb");
+        if (!pngfile)
+            Error("Couldn't read %s", name);
+    byte* pngbuf = (byte*)malloc(pnglen);
+    fread(pngbuf, pnglen, 1, pngfile);
+    fclose(pngfile);
+    cp_image_t pngimg = cp_load_png_mem(pngbuf, pnglen);
+    *width = pngimg.w;
+    *height = pngimg.h;
+    *pixels = (byte*)(pngimg.pix);
+}
 
-    byte* pic = nullptr;
-    const char* texturename = texinfo[txnum].texture;
-    sprintf(filename, "textures/%s.tga", texturename);
-    if (!RelativeFileExists(filename)) {
-        return 0;
-    }
-
-    int width, height;
-    LoadTGA(filename, &pic, &width, &height);
-    if (!pic) {
-        return 0;
-    }
-
-    projtexture_t *projtex = CreateProjTexture(texturename, width, height);
+// [slipyx] calculates average of rgba data and sets texture reflectivity
+void SetTextureReflectivityFromRGBA(int txnum, const char *name, byte *pic, int width, int height)
+{
+    projtexture_t *projtex = CreateProjTexture(name, width, height);
     int pixelcount = width * height;
     
     vec3_t sum_for_avg;
@@ -815,7 +823,7 @@ int TryLoadTGA(int txnum)
         }
     }
     if (projtex) {
-        StoreTextureForProjection(projtex, texturename);
+        StoreTextureForProjection(projtex, name);
     }
     if (num_transparent == pixelcount) {
         VectorClear(texture_reflectivity[txnum]);
@@ -827,10 +835,54 @@ int TryLoadTGA(int txnum)
         texture_reflectivity[txnum].z = sum_for_avg.z * fVar2 / 255;
     }
     SetTextureReflectivity(txnum);
+}
+
+int TryLoadTGA(int txnum)
+{
+    char filename[1024];
+
+    byte* pic = nullptr;
+    const char* texturename = texinfo[txnum].texture;
+    sprintf(filename, "textures/%s.tga", texturename);
+    if (!RelativeFileExists(filename)) {
+        return 0;
+    }
+
+    int width, height;
+    LoadTGA(filename, &pic, &width, &height);
+    if (!pic) {
+        return 0;
+    }
+
+    SetTextureReflectivityFromRGBA(txnum, texturename, pic, width, height);
+
     free(pic);
     return 1;
 }
 
+
+int TryLoadPNG(int txnum)
+{
+    char filename[1024];
+
+    byte* pic = nullptr;
+    const char* texturename = texinfo[txnum].texture;
+    sprintf(filename, "textures/%s.png", texturename);
+    if (!RelativeFileExists(filename)) {
+        return 0;
+    }
+
+    int width, height;
+    LoadPNG(filename, &pic, &width, &height);
+    if (!pic) {
+        return 0;
+    }
+
+    SetTextureReflectivityFromRGBA(txnum, texturename, pic, width, height);
+
+    free(pic);
+    return 1;
+}
 
 void maybe_LoadJPG(const char* filename, byte** bytes, int* width, int* height)
 {
@@ -1178,6 +1230,7 @@ void CalcTextureReflectivityMain(void)
         // if first time encountering, calculate ref
         if (iVar4 == txnum) {
             if (!TryLoadTGA(txnum) &&
+                !TryLoadPNG(txnum) &&
                 !TryLoadJPG(txnum) &&
                 !TryLoadM32(txnum) &&
                 !TryLoadM8(txnum) &&
