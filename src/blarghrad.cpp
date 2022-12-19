@@ -344,7 +344,7 @@ void FreeProjTextures(void)
     }
 
     // free textures
-    for (projtexture_t* puVar3 = g_proj_textures; puVar3; puVar3 = puVar3->next) {
+    for (projtexture_t* puVar3 = g_proj_textures; puVar3; ) {
         projtexture_t* tmp = puVar3->next;
         free(puVar3->texture32);
         free(puVar3);
