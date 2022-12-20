@@ -243,9 +243,6 @@ void SampleShadowColor(shadowfaces_unk_t *shfunk, const vec3_t& param_2, vec3_t 
         fVar1 = fVar22 - floor(fVar22);
         fVar2 = fVar3 - floor(fVar3);
 
-        fVar22 = 1 - fVar1;
-        fVar3 = 1 - fVar2;
-
         int x = (int)floor(fVar22) % shfunk->projtex->width;
         int y = (int)floor(fVar3) % shfunk->projtex->height;
         int x2 = x + 1;
@@ -269,6 +266,9 @@ void SampleShadowColor(shadowfaces_unk_t *shfunk, const vec3_t& param_2, vec3_t 
         int ne = (row + x2);
         int sw = (row2 + x);
         int se = (row2 + x2);
+
+        fVar22 = 1.0f - fVar1;
+        fVar3 = 1.0f - fVar2;
 
         struct rgba_t { byte R, G, B, A; };
         rgba_t* p = (rgba_t*)shfunk->projtex->texture32;
