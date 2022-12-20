@@ -227,18 +227,22 @@ void SampleShadowColor(shadowfaces_unk_t *shfunk, const vec3_t& param_2, vec3_t 
     float fVar22;
 
     int tx = dfaces[shfunk->face].texinfo;
-    fVar22 = texinfo[tx].vecs[0][0] * param_2.x +
-        texinfo[tx].vecs[0][2] * param_2.z + texinfo[tx].vecs[0][1] * param_2.y +
-        texinfo[tx].vecs[0][3];
+    texinfo_t& ti = texinfo[tx];
+
+    fVar22 = ti.vecs[0][0] * param_2.x +
+             ti.vecs[0][1] * param_2.y +
+             ti.vecs[0][2] * param_2.z + 
+             ti.vecs[0][3];
 
     if (shadowfilter != 0) {
 
         // bilinear filtering on shadowface projections
 
         fVar22 = fVar22 - 0.5f;
-        fVar3 = (texinfo[tx].vecs[1][2] * param_2.z +
-            texinfo[tx].vecs[1][1] * param_2.y + texinfo[tx].vecs[1][0] * param_2.x +
-            texinfo[tx].vecs[1][3]) - 0.5f;
+        fVar3 = (ti.vecs[1][0] * param_2.x +
+                 ti.vecs[1][1] * param_2.y + 
+                 ti.vecs[1][2] * param_2.z +
+                 ti.vecs[1][3]) - 0.5f;
 
         fVar1 = fVar22 - floor(fVar22);
         fVar2 = fVar3 - floor(fVar3);
@@ -259,8 +263,8 @@ void SampleShadowColor(shadowfaces_unk_t *shfunk, const vec3_t& param_2, vec3_t 
         if (y2 < 0) {
             y2 += shfunk->projtex->height;
         }
-        int row2 = shfunk->projtex->width * y2;
         int row = shfunk->projtex->width * y;
+        int row2 = shfunk->projtex->width * y2;
 
         int nw = (row + x);
         int ne = (row + x2);
@@ -285,13 +289,13 @@ void SampleShadowColor(shadowfaces_unk_t *shfunk, const vec3_t& param_2, vec3_t 
     }
 
 
-    fVar1 = texinfo[tx].vecs[1][0];
+    fVar1 = ti.vecs[1][0];
     fVar2 = param_2.x;
-    fVar3 = texinfo[tx].vecs[1][1];
+    fVar3 = ti.vecs[1][1];
     fVar4 = param_2.y;
-    fVar5 = texinfo[tx].vecs[1][2];
+    fVar5 = ti.vecs[1][2];
     fVar6 = param_2.z;
-    fVar7 = texinfo[tx].vecs[1][3];
+    fVar7 = ti.vecs[1][3];
     
     int x = (int)floor(fVar22) % shfunk->projtex->width;
     if (x < 0) {
@@ -321,8 +325,6 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
     vec3_t local_48;
     vec3_t local_3c;
     vec3_t tmp, tmp2, tmp3;
-    float local_24;
-    float local_20;
 
     CHKVAL("TestLine_shadowfunk-length", length);
 
@@ -336,8 +338,7 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
     dplane_t* pln;
     if (dfaces[shfunk->face].side == 0) {
         pln = &dplanes[planenum];
-    }
-    else {
+    } else {
         pln = &backplanes[planenum];
     }
     if (0 <= DotProduct(pln->normal, length)) {
@@ -370,14 +371,11 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
         }
         VectorSubtract(start, local_48, tmp2);
         VectorSubtract(stop, local_48, tmp3);
-
-        tmp.x = tmp.x - local_48.x;
-        local_24 = tmp2.y * (tmp.z - local_48.z) - (tmp.y - local_48.y) * tmp2.z;
-        local_20 = tmp.x * tmp2.z - (tmp.z - local_48.z) * tmp2.x;
-        tmp.y = (tmp.y - local_48.y) * tmp2.x - tmp.x * tmp2.y;
-        fVar2 = local_24 * tmp3.x + local_20 * tmp3.y + tmp3.z * tmp.y;
-
-        if (fVar2 > 0 || (fVar2 == 0 && (0 <= (local_24 * 0.54159999 + local_20 * 0.74190003) - tmp.y * 0.39530000))) {
+        VectorSubtract(tmp, local_48, tmp);
+        vec3_t c;
+        CrossProduct(tmp2, tmp, c);
+        float d = DotProduct(tmp3, c);
+        if (d > 0 || (d == 0 && (0 <= (c.x * 0.5416f + c.y * 0.7419f) - c.z * 0.3953f))) {
             break;
         }
     }
@@ -391,59 +389,59 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
     local_3c.y = (stop.y - start.y) * fVar1 + start.y;
     local_3c.z = (stop.z - start.z) * fVar1 + start.z;
 
-    float trans;
-    if (shfunk->UNKNOWN_FIELD_0xC == 0) {
-        if ((shmod->nonTransFaces == 1) &&
+    if (shfunk->UNKNOWN_FIELD_0xC == 0 && shmod->nonTransFaces == 1 &&
             (!shfunk->projtex || (shfunk->projtex->has_transparent_pixels == 0)))
-        {
-            VectorClear((*out_param_9));
-            goto LAB_00404265;
-        }
-        trans = 1;
-    }
-    else {
-        if ((texinfo[dfaces[shfunk->face].texinfo].flags & SURF_TRANS33) == 0) {
-            trans = 0.66f;
-        }
-        else {
-            trans = 0.33f;
-        }
-    }
-    if ((shfunk->projtex && (shfunk->projtex->has_transparent_pixels != 0)) || (shfunk->maybe_bool != 0))
     {
-        CHKVAL2("shadowfun-maybebool", shfunk->maybe_bool);
-        SampleShadowColor(shfunk, local_3c, &color, &dstart);
-    }
-    if (shfunk->projtex && (shfunk->projtex->has_transparent_pixels != 0)) {
-        trans = (dstart * trans);
-        if (trans == 0)
-            trans = 1.f / (255 * 10);
-    }
-    if (shfunk->maybe_bool == 0) {
-        int c = shfunk->UNKNOWN_FIELD_0xC == 0 ? shmod->nonTransFaces : shmod->transFaces;
-        if (c == 2) {
-            VectorCopy(texture_reflectivity[dfaces[shfunk->face].texinfo], color);
-        }
-        else {
-            VectorClear(color);
-        }
+        VectorClear((*out_param_9));
     }
     else {
-        VectorScale(color, g_texscale, color);
-        if ((color.x > 1) || (color.y > 1) || (color.z > 1)) {
-            ColorNormalize(color, color);
+        float trans;
+        if (shfunk->UNKNOWN_FIELD_0xC != 0) {
+            if ((texinfo[dfaces[shfunk->face].texinfo].flags & SURF_TRANS33) == 0) {
+                trans = 0.66f;
+            } else {
+                trans = 0.33f;
+            }
+        } else {
+            trans = 1.0f;
         }
-    }
-    fVar1 = 1 - trans;
-    out_param_9->x = out_param_9->x * fVar1 + color.x * trans * out_param_9->x;
-    out_param_9->y = out_param_9->y * fVar1 + color.y * trans * out_param_9->y;
-    out_param_9->z = out_param_9->z * fVar1 + color.z * trans * out_param_9->z;
-    if (((out_param_9->x != 0) || (out_param_9->y != 0)) || (out_param_9->z != 0)) {
-        CHKVAL("TestLine_shadowfunk-ret0", true);
-        return 0;
+
+        if ((shfunk->projtex && shfunk->projtex->has_transparent_pixels != 0) || (shfunk->maybe_bool != 0))
+        {
+            CHKVAL2("shadowfun-maybebool", shfunk->maybe_bool);
+            SampleShadowColor(shfunk, local_3c, &color, &dstart);
+        }
+
+        if (shfunk->projtex && shfunk->projtex->has_transparent_pixels != 0) {
+            trans = (dstart * trans);
+            if (trans == 0.0f)
+                trans = 1.0f / (255 * 10);
+        }
+
+        if (shfunk->maybe_bool == 0) {
+            int c = shfunk->UNKNOWN_FIELD_0xC == 0 ? shmod->nonTransFaces : shmod->transFaces;
+            if (c == 2) {
+                VectorCopy(texture_reflectivity[dfaces[shfunk->face].texinfo], color);
+            } else {
+                VectorClear(color);
+            }
+        } else {
+            VectorScale(color, g_texscale, color);
+            if ((color.x > 1) || (color.y > 1) || (color.z > 1)) {
+                ColorNormalize(color, color);
+            }
+        }
+
+        fVar1 = 1.0f - trans;
+        out_param_9->x = out_param_9->x * fVar1 + color.x * trans * out_param_9->x;
+        out_param_9->y = out_param_9->y * fVar1 + color.y * trans * out_param_9->y;
+        out_param_9->z = out_param_9->z * fVar1 + color.z * trans * out_param_9->z;
+        if (((out_param_9->x != 0) || (out_param_9->y != 0)) || (out_param_9->z != 0)) {
+            CHKVAL("TestLine_shadowfunk-ret0", true);
+            return 0;
+        }
     }
 
-LAB_00404265:
     if (out_param_8) {
         VectorCopy(local_3c, (*out_param_8));
     }

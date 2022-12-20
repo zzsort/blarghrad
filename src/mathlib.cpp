@@ -71,7 +71,7 @@ void VectorMA(const vec3_t& ofs, double scale, const vec3_t& val, vec3_t& out)
     CHKVAL2("VectorMA-result", out);
 }
 
-void CrossProduct(vec3_t v1, vec3_t v2, vec3_t& cross)
+void CrossProduct(const vec3_t& v1, const vec3_t& v2, vec3_t& cross)
 {
     cross.x = v1.y * v2.z - v1.z * v2.y;
     cross.y = v1.z * v2.x - v1.x * v2.z;

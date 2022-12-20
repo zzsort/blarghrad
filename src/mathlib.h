@@ -57,7 +57,7 @@ float VectorLength(vec3_t v);
 
 void VectorMA(const vec3_t& ofs, double scale, const vec3_t& val, vec3_t& out);
 
-void CrossProduct(vec3_t v1, vec3_t v2, vec3_t& cross);
+void CrossProduct(const vec3_t& v1, const vec3_t& v2, vec3_t& cross);
 vec_t VectorNormalize(vec3_t in, vec3_t& out);
 vec_t ColorNormalize(vec3_t in, vec3_t& out);
 void VectorInverse(vec3_t& v);

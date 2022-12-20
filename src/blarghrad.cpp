@@ -954,13 +954,13 @@ int MakeShadowFaces(shadowmodel_t *shmod)
         int iVar5 = -1;
         if ((bool)(txflags & SURF_TRANS33) == (bool)(txflags & SURF_TRANS66)) {
             if ((shmod->nonTransFaces != 0) &&
-                (((char)txflags < '\0' || ((shmod->modelnum != 0 && (shmod->nonTransFaces < 0)))))) {
+                ((txflags & SURF_NODRAW) || (shmod->modelnum != 0 && shmod->nonTransFaces < 0))) {
                 iVar5 = 0; // use nonTransFaces
             }
         }
         else if ((shmod->transFaces != 0) &&
                 ((txflags & SURF_NODRAW) ||
-                (shmod->modelnum != 0 && (shmod->transFaces < 0)))) {
+                (shmod->modelnum != 0 && shmod->transFaces < 0))) {
             iVar5 = 1; // use transFaces
         }
 
@@ -1055,8 +1055,9 @@ void MakeShadowModels(void)
                     }
                 }
             }
-            totalModelFaces = countModelFaces;
         }
+        totalModelFaces = countModelFaces;
+
         if ((iNonTransFaces != 0) || (iTransFaces != 0)) {
             shadowmodel_t *world = (shadowmodel_t*)malloc(sizeof(shadowmodel_t));
             if (!world) {
@@ -1800,16 +1801,7 @@ float	sampleofs[5][2] =
 
 void BuildFacelights(int facenum)
 {
-    dface_t	*f;
-    lightinfo_t	l[5];
-    vec3_t		*styletable[MAX_LSTYLES];
-    int			i, j;
-    patch_t		*patch;
-    int			numsamples;
-    int			tablesize;
-    facelight_t		*fl;
-
-    f = &dfaces[facenum];
+    dface_t* f = &dfaces[facenum];
 
     // check non-lit textures
     if (lightwarp && (texinfo[f->texinfo].flags & SURF_WARP))
@@ -1820,41 +1812,36 @@ void BuildFacelights(int facenum)
         (f->styles[0] | f->styles[1] | f->styles[2]))
         return;
 
-    memset(styletable, 0, sizeof(styletable));
+    lightinfo_t	l[5];
+    vec3_t *styletable[MAX_LSTYLES] = {};
 
-    if (extrasamples)
-        numsamples = 5;
-    else
-        numsamples = 1;
-    for (i = 0; i < numsamples; i++)
+    int numsamples = (extrasamples ? 5 : 1);
+    for (int i = 0; i < numsamples; i++)
     {
-        memset(&l[i], 0, sizeof(l[i]));
-        l[i].surfnum = facenum;
-        l[i].face = f;
-        VectorCopy(dplanes[f->planenum].normal, l[i].facenormal);
-        l[i].facedist = dplanes[f->planenum].dist;
-        if (f->side)
-        {
-            VectorSubtract(vec3_origin, l[i].facenormal, l[i].facenormal);
-            l[i].facedist = -l[i].facedist;
+        lightinfo_t* li = &l[i];
+        *li = {};
+        li->surfnum = facenum;
+        li->face = f;
+        VectorCopy(dplanes[f->planenum].normal, li->facenormal);
+        li->facedist = dplanes[f->planenum].dist;
+        if (f->side) {
+            VectorSubtract(vec3_origin, li->facenormal, li->facenormal);
+            li->facedist = -li->facedist;
         }
 
         // get the origin offset for rotating bmodels
-        VectorCopy(face_offset[facenum], l[i].modelorg);
+        VectorCopy(face_offset[facenum], li->modelorg);
 
-        CalcFaceVectors(&l[i]);
-        CalcFaceExtents(&l[i]);
-        if (nudgefix == 0)
-        {
-            CalcPoints(&l[i], sampleofs[i][0], sampleofs[i][1], facenum);
-        }
-        else
-        {
-            CalcPoints2(&l[i], sampleofs[i][0], sampleofs[i][1], facenum);
+        CalcFaceVectors(li);
+        CalcFaceExtents(li);
+        if (nudgefix == 0) {
+            CalcPoints(li, sampleofs[i][0], sampleofs[i][1], facenum);
+        } else {
+            CalcPoints2(li, sampleofs[i][0], sampleofs[i][1], facenum);
         }
     }
 
-    tablesize = l[0].numsurfpt * sizeof(vec3_t);
+    const int tablesize = l[0].numsurfpt * sizeof(vec3_t);
     CHKVAL("BuildFaceLights-tablesize", tablesize);
 
     styletable[0] = (vec3_t*)malloc(tablesize);
@@ -1869,7 +1856,7 @@ void BuildFacelights(int facenum)
     }
     memset(bouncelight, 0, tablesize);
 
-    fl = &facelight[facenum];
+    facelight_t* fl = &facelight[facenum];
     fl->numsamples = l[0].numsurfpt;
     fl->origins = (vec3_t*)malloc(tablesize);
     if (!fl->origins) {
@@ -1877,10 +1864,9 @@ void BuildFacelights(int facenum)
     }
     memcpy(fl->origins, l[0].realpt, tablesize);
 
-    for (i = 0; i < l[0].numsurfpt; i++)
+    for (int i = 0; i < l[0].numsurfpt; i++)
     {
-
-        for (j = 0; j < numsamples; j++)
+        for (int j = 0; j < numsamples; j++)
         {
             vec3_t facenormal;
             maybePhongSomething(facenum, l[j].realpt[i], l[0].facenormal, /*out*/facenormal);
@@ -1894,22 +1880,18 @@ void BuildFacelights(int facenum)
 
     free(bouncelight);
 
-    for (i = 0; i < numsamples; i++) {
+    for (int i = 0; i < numsamples; i++) {
         free(l[i].realpt);
         free(l[i].surfpt);
     }
 
     // average up the direct light on each patch for radiosity
     int patch_count = 0;
-    for (patch = face_patches[facenum]; patch; patch = patch->next)
-    {
-        if (patch->samples)
-        {
+    for (patch_t* patch = face_patches[facenum]; patch; patch = patch->next) {
+        if (patch->samples) {
             VectorScale(patch->samplelight, 1.0 / patch->samples, patch->samplelight);
-        }
-        else
-        {
-            //			printf ("patch with no samples\n");
+        } else {
+            // printf ("patch with no samples\n");
         }
         patch_count++;
     }
@@ -1929,7 +1911,7 @@ void BuildFacelights(int facenum)
             }
             p = p->next;
         }
-        for (i = 0; i < MAX_LSTYLES; i++) {
+        for (int i = 0; i < MAX_LSTYLES; i++) {
             if (styletable[i]) {
                 free(styletable[i]);
             }
@@ -1949,7 +1931,7 @@ void BuildFacelights(int facenum)
         memset(styletable[style], 0, tablesize);
     }
 
-    for (i = 0; i < MAX_LSTYLES; i++)
+    for (int i = 0; i < MAX_LSTYLES; i++)
     {
         if (!styletable[i])
             continue;
@@ -1980,7 +1962,7 @@ void BuildFacelights(int facenum)
         VectorNormalize(face_patches[facenum]->baselight, vStack1748);
         VectorScale(vStack1748, face_patches[facenum]->lightmin, vStack1748);
         vec3_t* pstyle = styletable[style];
-        for (i = 0; i < l[0].numsurfpt; i++, pstyle++) {
+        for (int i = 0; i < l[0].numsurfpt; i++, pstyle++) {
             if (brightsurf != 0) {
                 VectorAdd((*pstyle), face_patches[facenum]->baselight, (*pstyle));
             }
