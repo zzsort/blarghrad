@@ -414,8 +414,6 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
 
         if (shfunk->projtex && shfunk->projtex->has_transparent_pixels != 0) {
             trans = (dstart * trans);
-            if (trans == 0.0f)
-                trans = 1.0f / (255 * 10);
         }
 
         if (shfunk->maybe_bool == 0) {
