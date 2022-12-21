@@ -712,7 +712,7 @@ void SubdividePatch(patch_t *patch)
     //
     VectorCopy(vec3_origin, split);
     split.data[i] = 1;
-    dist = (mins.data[i] + maxs.data[i])*0.5;
+    dist = (mins.data[i] + maxs.data[i]) / 2;
     ClipWindingEpsilon(w, split, dist, ON_EPSILON, &o1, &o2);
 
     //

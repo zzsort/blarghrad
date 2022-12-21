@@ -25,30 +25,47 @@ struct pak_t {
     pak_t* nextpak;
 };
 
+struct rgb_t {
+    byte R, G, B;
+};
+
+struct rgba_t {
+    byte R, G, B, A;
+};
+
 struct projtexture_t {
     projtexture_t* next;
-    int	width;
-    int	height;
-    int	has_transparent_pixels;
-    byte* texture32;
+    int width;
+    int height;
+    bool has_transparent_pixels;
+    rgba_t* texture32;
 };
 
 struct shadowfaces_unk_t {
     shadowfaces_unk_t* next;
     projtexture_t* projtex;
     int face;
-    int UNKNOWN_FIELD_0xC; // maybe: 0 = nonTrans, 1 = trans. seems to index into shadowmodel_t
-    int maybe_bool;
+    bool useTransFaces; // 0 = nonTrans, 1 = trans
+    bool cast_single_color_shadow_with_tex_alpha;
     vec3_t mins;
     vec3_t maxs;
+};
+
+enum class TextureShadowMode {
+    DisabledByCommandLine = -1,
+    Disabled = 0,
+    IgnoreAlpha = 1,
+    SingleColorWithReflectivityColor = 2,
+    SingleColorWithTextureAlphaMask = 3,
+    ProjectTextureWithTextureAlphaMask = 4,
 };
 
 struct shadowmodel_t {
     shadowmodel_t* next;
     shadowfaces_unk_t* shadownext;
     int modelnum;
-    int nonTransFaces;
-    int transFaces; // this field must immediately follow nonTransFaces!
+    TextureShadowMode nonTransFaces;
+    TextureShadowMode transFaces;
 };
 
 enum class Falloff {

@@ -43,8 +43,8 @@ int shadowfilter = 1;
 float saturation = 1.0f;
 float stylemin = 1.0f;
 float g_gamma = 1.0f;
-int iNonTransFaces = 1;
-int iTransFaces = 3;
+TextureShadowMode g_iNonTransFaces = TextureShadowMode::IgnoreAlpha;
+TextureShadowMode g_iTransFaces = TextureShadowMode::SingleColorWithTextureAlphaMask;
 float chopsky = 0;
 float chopwarp = 0;
 float choplight = 0;
@@ -70,7 +70,7 @@ pak_t* moddir_paks = nullptr;
 
 vec3_t texture_reflectivity[MAX_MAP_TEXINFO];
 
-byte* palette; // 768 bytes
+rgb_t* g_palette; // 768 bytes
 
 shadowmodel_t* g_shadow_world;
 projtexture_t* g_proj_textures;
@@ -290,13 +290,13 @@ projtexture_t* CreateProjTexture(const char* name, int width, int height)
             if (!ptex) {
                 Error("CreateProjTexture: projtexture malloc failed");
             }
-            ptex->texture32 = (byte*)malloc(width * height * 4);
+            ptex->texture32 = (rgba_t*)malloc(width * height * 4);
             if (!ptex->texture32) {
                 Error("CreateProjTexture: texture malloc failed");
             }
             ptex->width = width;
             ptex->height = height;
-            ptex->has_transparent_pixels = 0;
+            ptex->has_transparent_pixels = false;
             return ptex;
         }
     }
@@ -306,12 +306,12 @@ projtexture_t* CreateProjTexture(const char* name, int width, int height)
 
 void StoreTextureForProjection(projtexture_t *projtex, const char *name)
 {
-    bool isTextureUsed = (projtex->has_transparent_pixels != 0);
+    bool isTextureUsed = (projtex->has_transparent_pixels);
     for (shadowmodel_t* m = g_shadow_world; m; m = m->next) {
         for (shadowfaces_unk_t* sf = m->shadownext; sf; sf = sf->next) {
             if (!Q_strcasecmp(name, texinfo[dfaces[sf->face].texinfo].texture)) {
                 sf->projtex = projtex;
-                if (sf->maybe_bool) {
+                if (sf->cast_single_color_shadow_with_tex_alpha) {
                     isTextureUsed = true;
                 }
             }
@@ -424,7 +424,7 @@ bool RelativeFileExists(const char *path)
     return false;
 }
 
-void real_LoadPCX(char *filename, byte **pic, byte **palette, int *width, int *height)
+void real_LoadPCX(char *filename, byte **pic, rgb_t **palette, int *width, int *height)
 {
     byte *raw;
     int local_4;
@@ -464,7 +464,7 @@ void real_LoadPCX(char *filename, byte **pic, byte **palette, int *width, int *h
 
     if (palette)
     {
-        *palette = (byte*)malloc(768);
+        *palette = (rgb_t*)malloc(768);
         memcpy(*palette, (byte *)pcx + len - 768, 768);
     }
 
@@ -524,7 +524,7 @@ int TryLoadPCX(int txnum)
 
     byte *pic;
     int width, height;
-    real_LoadPCX(filename, &pic, &palette, &width, &height);
+    real_LoadPCX(filename, &pic, &g_palette, &width, &height);
     if (!pic) {
         return 0;
     }
@@ -539,20 +539,20 @@ int TryLoadPCX(int txnum)
         if (palIndex == 255) {
             num_transparent++;
             if (projtex) {
-                projtex->texture32[i * 4 + 3] = 0;
-                projtex->has_transparent_pixels = 1;
+                projtex->texture32[i].A = 0;
+                projtex->has_transparent_pixels = true;
             }
         }
         else {
-            for (int k = 0; k < 3; k++) {
-                byte chan = palette[k + palIndex * 3];
-                sum_for_avg[k] = sum_for_avg[k] + chan;
-                if (projtex) {
-                    projtex->texture32[k + i * 4] = chan;
-                }
-            }
+            rgb_t& color = g_palette[palIndex];
+            sum_for_avg[0] += color.R;
+            sum_for_avg[1] += color.G;
+            sum_for_avg[2] += color.B;
             if (projtex) {
-                projtex->texture32[i * 4 + 3] = 255;
+                projtex->texture32[i].R = color.R;
+                projtex->texture32[i].G = color.G;
+                projtex->texture32[i].B = color.B;
+                projtex->texture32[i].A = 255;
             }
         }
     }
@@ -606,7 +606,7 @@ int fgetLittleShort(FILE *f)
 LoadTGA
 =============
 */
-void LoadTGA(char *name, byte **pixels, int *width, int *height)
+void LoadTGA(char *name, rgba_t **pixels, int *width, int *height)
 {
     int				columns, rows, numPixels;
     byte			*pixbuf;
@@ -654,7 +654,7 @@ void LoadTGA(char *name, byte **pixels, int *width, int *height)
     if (height)
         *height = rows;
     targa_rgba = (byte*)malloc(numPixels * 4);
-    *pixels = targa_rgba;
+    *pixels = (rgba_t*)targa_rgba;
 
     if (targa_header.id_length != 0)
         fseek(fin, targa_header.id_length, SEEK_CUR);  // skip TARGA image comment
@@ -774,7 +774,6 @@ int TryLoadTGA(int txnum)
 {
     char filename[1024];
 
-    byte* pic = nullptr;
     const char* texturename = texinfo[txnum].texture;
     sprintf(filename, "textures/%s.tga", texturename);
     if (!RelativeFileExists(filename)) {
@@ -782,35 +781,30 @@ int TryLoadTGA(int txnum)
     }
 
     int width, height;
+    rgba_t* pic = nullptr;
     LoadTGA(filename, &pic, &width, &height);
     if (!pic) {
         return 0;
     }
 
     projtexture_t *projtex = CreateProjTexture(texturename, width, height);
-    int pixelcount = width * height;
+    const int pixelcount = width * height;
     
-    vec3_t sum_for_avg;
-    VectorClear(sum_for_avg);
+    int sum_for_avg[3] = {};
     int num_transparent = 0;
-    for (int i = 0; i < pixelcount * 4; i += 4)
+    for (int i = 0; i < pixelcount; i++)
     {
-        if (pic[i + 3] == 0) {
+        rgba_t& color = pic[i];
+        sum_for_avg[0] += color.R;
+        sum_for_avg[1] += color.G;
+        sum_for_avg[2] += color.B;
+        if (color.A == 0) {
             num_transparent++;
         }
-        else {
-            for (int j = 0; j < 3; j++) {
-                byte chan = pic[i + j];
-                sum_for_avg.data[j] += chan;
-                if (projtex) {
-                    projtex->texture32[i + j] = chan;
-                }
-            }
-        }
         if (projtex) {
-            projtex->texture32[i + 3] = pic[i + 3];
-            if (projtex->texture32[i + 3] != 255) {
-                projtex->has_transparent_pixels = 1;
+            projtex->texture32[i] = color;
+            if (projtex->texture32[i].A != 255) {
+                projtex->has_transparent_pixels = true;
             }
         }
     }
@@ -822,9 +816,9 @@ int TryLoadTGA(int txnum)
     }
     else {
         double fVar2 = 1.0 / (pixelcount - num_transparent);
-        texture_reflectivity[txnum].x = sum_for_avg.x * fVar2 / 255;
-        texture_reflectivity[txnum].y = sum_for_avg.y * fVar2 / 255;
-        texture_reflectivity[txnum].z = sum_for_avg.z * fVar2 / 255;
+        texture_reflectivity[txnum].x = sum_for_avg[0] / 255.0 * fVar2;
+        texture_reflectivity[txnum].y = sum_for_avg[1] / 255.0 * fVar2;
+        texture_reflectivity[txnum].z = sum_for_avg[2] / 255.0 * fVar2;
     }
     SetTextureReflectivity(txnum);
     free(pic);
@@ -881,7 +875,6 @@ void maybe_LoadJPG(const char* filename, byte** bytes, int* width, int* height)
 
 int TryLoadJPG(int txnum)
 {
-    vec3_t sum_for_avg;
     char filename[1024];
 
     const char *texturename = texinfo[txnum].texture;
@@ -898,19 +891,21 @@ int TryLoadJPG(int txnum)
     }
 
     projtexture_t *projtex = CreateProjTexture(texturename, width, height);
-    int pixels_size = width * height;
-    VectorClear(sum_for_avg);
+    const int pixels_size = width * height;
+    int sum_for_avg[3] = {};
     byte* p = pic;
     for (int i = 0; i < pixels_size; i++, p += 3) {
-        for (int j = 0; j < 3; j++) {
-            byte bVar1 = pic[i*3 + j];
-            sum_for_avg.data[j] += bVar1;
-            if (projtex) {
-                projtex->texture32[i*4 + j] = bVar1;
-            }
-        }
+        byte r = pic[i * 3 + 0];
+        byte g = pic[i * 3 + 1];
+        byte b = pic[i * 3 + 2];
+        sum_for_avg[0] += r;
+        sum_for_avg[1] += g;
+        sum_for_avg[2] += b;
         if (projtex) {
-            projtex->texture32[i*4 + 3] = 255;
+            projtex->texture32[i].R = r;
+            projtex->texture32[i].G = g;
+            projtex->texture32[i].B = b;
+            projtex->texture32[i].A = 255;
         }
         //CHKVAL2("build_sum", sum_for_avg);
     }
@@ -919,9 +914,9 @@ int TryLoadJPG(int txnum)
     }
     CHKVAL2("sum_for_avg", sum_for_avg);
     double fVar2 = 1.0 / (width * height);
-    texture_reflectivity[txnum].x = sum_for_avg.x * fVar2 / 255;
-    texture_reflectivity[txnum].y = sum_for_avg.y * fVar2 / 255;
-    texture_reflectivity[txnum].z = sum_for_avg.z * fVar2 / 255;
+    texture_reflectivity[txnum].x = sum_for_avg[0] / 255.0 * fVar2;
+    texture_reflectivity[txnum].y = sum_for_avg[1] / 255.0 * fVar2;
+    texture_reflectivity[txnum].z = sum_for_avg[2] / 255.0 * fVar2;
     SetTextureReflectivity(txnum);
     free(pic);
     return 1;
@@ -951,20 +946,21 @@ int MakeShadowFaces(shadowmodel_t *shmod)
             continue;
         }
 
-        int iVar5 = -1;
+        int useTransFaces = -1;
         if ((bool)(txflags & SURF_TRANS33) == (bool)(txflags & SURF_TRANS66)) {
-            if ((shmod->nonTransFaces != 0) &&
-                ((txflags & SURF_NODRAW) || (shmod->modelnum != 0 && shmod->nonTransFaces < 0))) {
-                iVar5 = 0; // use nonTransFaces
+            if ((shmod->nonTransFaces != TextureShadowMode::Disabled) &&
+                ((txflags & SURF_NODRAW) || 
+                (shmod->modelnum != 0 && shmod->nonTransFaces != TextureShadowMode::DisabledByCommandLine))) {
+                useTransFaces = 0; // use nonTransFaces
             }
         }
-        else if ((shmod->transFaces != 0) &&
+        else if ((shmod->transFaces != TextureShadowMode::Disabled) &&
                 ((txflags & SURF_NODRAW) ||
-                (shmod->modelnum != 0 && shmod->transFaces < 0))) {
-            iVar5 = 1; // use transFaces
+                (shmod->modelnum != 0 && shmod->transFaces != TextureShadowMode::DisabledByCommandLine))) {
+            useTransFaces = 1; // use transFaces
         }
 
-        if (iVar5 == -1) {
+        if (useTransFaces == -1) {
             continue;
         }
 
@@ -974,12 +970,10 @@ int MakeShadowFaces(shadowmodel_t *shmod)
         }
         memset(shfunk, 0, sizeof(shadowfaces_unk_t));
         shfunk->face = face;
-        // TODO this field is based on flags... figure out name -- identifies to use trans or nontrans?
-        shfunk->UNKNOWN_FIELD_0xC = iVar5;
-        int c = iVar5 == 0 ? shmod->nonTransFaces : shmod->transFaces;
-        if (c == 3) {
-            // TODO - rename - bool=true means to project the texture
-            shfunk->maybe_bool = 1;
+        shfunk->useTransFaces = useTransFaces;
+        TextureShadowMode c = useTransFaces ? shmod->transFaces : shmod->nonTransFaces;
+        if (c == TextureShadowMode::SingleColorWithTextureAlphaMask) {
+            shfunk->cast_single_color_shadow_with_tex_alpha = true;
         }
         shfunk->mins.z = 99999.f;
         shfunk->mins.y = 99999.f;
@@ -1008,84 +1002,77 @@ int MakeShadowFaces(shadowmodel_t *shmod)
 
 void MakeShadowModels(void)
 {
-    const char *value;
-    int countModelFaces;
-    int totalWorldspawnFaces;
-    int totalModelFaces;
-
     memset(g_shadow_faces, 0, MAX_MAP_FACES);
-    if (iNonTransFaces != -1) {
-        totalWorldspawnFaces = 0;
-        countModelFaces = 0;
-        totalModelFaces = 0;
-        for (int i = 0; i < num_entities; i++) {
-            entity_t *ent = &entities[i];
-
-            value = ValueForKey(ent, "classname");
-            if (!strcmp(ValueForKey(ent, "classname"), "worldspawn")) {
-                value = ValueForKey(ent, "_shadow");
-                if ((*value != '\0') &&
-                    sscanf(value, "%i %i", &iNonTransFaces, &iTransFaces) == 1) {
-                    iTransFaces = iNonTransFaces;
-                }
-            } else {
-                value = ValueForKey(ent, "_shadow");
-                if (*value != '\0') {
-                    shadowmodel_t *bmodel = (shadowmodel_t*)malloc(sizeof(shadowmodel_t));
-                    if (!bmodel) {
-                        Error("MakeShadowModels: bmodel malloc failed");
-                    }
-                    bmodel->shadownext = nullptr;
-                    bmodel->modelnum = 0;
-                    bmodel->nonTransFaces = 0;
-                    bmodel->transFaces = 0;
-                    /* value is modnum, string format ex: "*23" */
-                    bmodel->modelnum = atoi(ValueForKey(ent, "model") + 1);
-                    if (sscanf(value, "%i %i", &bmodel->nonTransFaces, &bmodel->transFaces) == 1) {
-                        bmodel->transFaces = bmodel->nonTransFaces;
-                    }
-                    bmodel->next = g_shadow_world;
-                    g_shadow_world = bmodel;
-                    countModelFaces += MakeShadowFaces(bmodel);
-                    if (bmodel->nonTransFaces < 0) {
-                        bmodel->nonTransFaces = -bmodel->nonTransFaces;
-                    }
-                    if (bmodel->transFaces < 0) {
-                        bmodel->transFaces = -bmodel->transFaces;
-                    }
-                }
-            }
-        }
-        totalModelFaces = countModelFaces;
-
-        if ((iNonTransFaces != 0) || (iTransFaces != 0)) {
-            shadowmodel_t *world = (shadowmodel_t*)malloc(sizeof(shadowmodel_t));
-            if (!world) {
-                Error("MakeShadowModels: world malloc failed");
-            }
-            world->shadownext = nullptr;
-            world->modelnum = 0;
-            world->nonTransFaces = 0;
-            world->transFaces = 0;
-            world->modelnum = 0;
-            world->nonTransFaces = iNonTransFaces;
-            world->transFaces = iTransFaces;
-            world->next = g_shadow_world;
-            g_shadow_world = world;
-            totalWorldspawnFaces = MakeShadowFaces(world);
-        }
-        qprintf("%i shadowfaces found (%i world, %i bmodel)\n", totalWorldspawnFaces + totalModelFaces,
-            totalWorldspawnFaces, totalModelFaces);
+    if (g_iNonTransFaces == TextureShadowMode::DisabledByCommandLine) {
+        return;
     }
+
+    int countModelFaces = 0;
+    int totalWorldspawnFaces = 0;
+    int totalModelFaces = 0;
+    for (int i = 0; i < num_entities; i++) {
+        entity_t *ent = &entities[i];
+
+        const char* value = ValueForKey(ent, "classname");
+        if (!strcmp(ValueForKey(ent, "classname"), "worldspawn")) {
+            value = ValueForKey(ent, "_shadow");
+            if (*value &&
+                sscanf(value, "%i %i", &g_iNonTransFaces, &g_iTransFaces) == 1) {
+                g_iTransFaces = g_iNonTransFaces;
+            }
+        } else {
+            value = ValueForKey(ent, "_shadow");
+            if (*value) {
+                shadowmodel_t *bmodel = (shadowmodel_t*)malloc(sizeof(shadowmodel_t));
+                if (!bmodel) {
+                    Error("MakeShadowModels: bmodel malloc failed");
+                }
+                bmodel->shadownext = nullptr;
+                bmodel->nonTransFaces = TextureShadowMode::Disabled;
+                bmodel->transFaces = TextureShadowMode::Disabled;
+                // value is modnum, string format ex: "*23"
+                bmodel->modelnum = atoi(ValueForKey(ent, "model") + 1);
+                if (sscanf(value, "%i %i", &bmodel->nonTransFaces, &bmodel->transFaces) == 1) {
+                    bmodel->transFaces = bmodel->nonTransFaces;
+                }
+                bmodel->next = g_shadow_world;
+                g_shadow_world = bmodel;
+
+                countModelFaces += MakeShadowFaces(bmodel);
+
+                if ((int)bmodel->nonTransFaces < 0 || (int)bmodel->nonTransFaces > 4 ||
+                    (int)bmodel->transFaces < 0 || (int)bmodel->transFaces > 4) {
+                    Error("MakeShadowModels: bmodel invalid _shadow value");
+                }
+            }
+        }
+    }
+    totalModelFaces = countModelFaces;
+
+    if ((g_iNonTransFaces != TextureShadowMode::Disabled) || (g_iTransFaces != TextureShadowMode::Disabled)) {
+        shadowmodel_t *world = (shadowmodel_t*)malloc(sizeof(shadowmodel_t));
+        if (!world) {
+            Error("MakeShadowModels: world malloc failed");
+        }
+        world->shadownext = nullptr;
+        world->modelnum = 0;
+        world->nonTransFaces = g_iNonTransFaces;
+        world->transFaces = g_iTransFaces;
+        world->next = g_shadow_world;
+        g_shadow_world = world;
+        totalWorldspawnFaces = MakeShadowFaces(world);
+    }
+    qprintf("%i shadowfaces found (%i world, %i bmodel)\n", totalWorldspawnFaces + totalModelFaces,
+        totalWorldspawnFaces, totalModelFaces);
 }
 
 int CalcTextureReflectivity(int txnum)
 {
     char path[1024];
 
-    if (!palette) {
-        palette = (byte*)malloc(768);
-        if (!palette) {
+    if (!g_palette) {
+        g_palette = (rgb_t*)malloc(768);
+        if (!g_palette) {
             Error("CalcTextureReflectivity: malloc failed");
         }
         sprintf(path, "pics/colormap.pcx");
@@ -1093,12 +1080,12 @@ int CalcTextureReflectivity(int txnum)
         int length = LoadPakFile(path, (byte**)&palbytes);
         if (length < 768) {
             printf("WARNING: Colormap not found - no colored texture lighting\n");
-            memset(palette, 255, 768);
+            memset(g_palette, 255, 768);
         }
         else {
-            memcpy(palette, palbytes + length - 768, 768);
-            free(palbytes);
+            memcpy(g_palette, palbytes + length - 768, 768);
         }
+        free(palbytes);
     }
 
     miptex_t* wal;
@@ -1113,25 +1100,24 @@ int CalcTextureReflectivity(int txnum)
     projtexture_t* projtex = CreateProjTexture(texinfo[txnum].texture, wal->width, wal->height);
     byte* pic = &((byte*)wal)[wal->offsets[0]];
     for (int i = 0; i < pixelcount; i++) {
-        byte color = pic[i];
-        if (color == 255) {
+        byte palIndex = pic[i];
+        if (palIndex == 255) {
             num_transparent++;
-            // TODO - probably should clear rgb
             if (projtex) {
-                projtex->texture32[i * 4 + 3] = 0;
-                projtex->has_transparent_pixels = 1;
+                projtex->texture32[i] = {};
+                projtex->has_transparent_pixels = true;
             }
         }
         else {
-            for (int j = 0; j < 3; j++) {
-                byte chan = palette[color * 3 + j];
-                rgbsum[j] += chan;
-                if (projtex) {
-                    projtex->texture32[i * 4 + j] = chan;
-                }
-            }
+            rgb_t& color = g_palette[palIndex];
+            rgbsum[0] += color.R;
+            rgbsum[1] += color.G;
+            rgbsum[2] += color.B;
             if (projtex) {
-                projtex->texture32[i * 4 + 3] = 255;
+                projtex->texture32[i].R = color.R;
+                projtex->texture32[i].G = color.G;
+                projtex->texture32[i].B = color.B;
+                projtex->texture32[i].A = 255;
             }
         }
     }
@@ -2722,7 +2708,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                                 dist *= l->m_distance;
                             }
                             if (dist > abs(l->m_intensity)) {
-                                continue; // next l  - goto skipadd instead?
+                                continue; // next l
                             }
                         }
                         else if (l->m_distance != 1) {
@@ -3092,8 +3078,6 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
 
             // add some light to it
             VectorMA(bouncelight[offset], scale * lightscale, local_2184, bouncelight[offset]);
-
-        skipadd:;
         }
     }
 
@@ -3104,7 +3088,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
             continue;
         }
         if (local_2108[i]) {
-            if (styletable[sun->style] == 0) {
+            if (styletable[sun->style] == nullptr) {
                 styletable[sun->style] = (vec3_t*)malloc(mapsize);
                 if (!styletable[sun->style]) {
                     Error("GatherSampleLight: (sunlight) malloc failed");
@@ -3654,8 +3638,8 @@ LAB_PROCESS_NEXT_ARG:
 
     if (!strcmp(argv[i], "-noshadowface")) {
         printf(" -noshadowface enabled  (shadowfaces disabled)\n");
-        iTransFaces = -1;
-        iNonTransFaces = -1;
+        g_iTransFaces = TextureShadowMode::DisabledByCommandLine;
+        g_iNonTransFaces = TextureShadowMode::DisabledByCommandLine;
         goto LAB_CONTINUE;
     }
 

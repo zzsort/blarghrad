@@ -274,8 +274,7 @@ void SampleShadowColor(shadowfaces_unk_t *shfunk, const vec3_t& param_2, vec3_t 
         fVar22 = 1.0f - fVar1;
         fVar3 = 1.0f - fVar2;
 
-        struct rgba_t { byte R, G, B, A; };
-        rgba_t* p = (rgba_t*)shfunk->projtex->texture32;
+        rgba_t* p = shfunk->projtex->texture32;
 
         out_color->x = ((p[sw].R * fVar22 + p[se].R * fVar1) * fVar2 + 
                         (p[nw].R * fVar22 + p[ne].R * fVar1) * fVar3) / 255.f;
@@ -309,10 +308,10 @@ void SampleShadowColor(shadowfaces_unk_t *shfunk, const vec3_t& param_2, vec3_t 
 
     int i = (shfunk->projtex->width * y + x) * 4;
 
-    out_color->x = shfunk->projtex->texture32[i + 0] / 255.f;
-    out_color->y = shfunk->projtex->texture32[i + 1] / 255.f;
-    out_color->z = shfunk->projtex->texture32[i + 2] / 255.f;
-    *out_param_4 = shfunk->projtex->texture32[i + 3] / 255.f;
+    out_color->x = shfunk->projtex->texture32[i].R / 255.0f;
+    out_color->y = shfunk->projtex->texture32[i].G / 255.0f;
+    out_color->z = shfunk->projtex->texture32[i].B / 255.0f;
+    *out_param_4 = shfunk->projtex->texture32[i].A / 255.0f;
 }
 
 
@@ -320,7 +319,6 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
     const vec3_t& length, const vec3_t& start, const vec3_t& stop, vec3_t *out_param_8, vec3_t *out_param_9)
 {
     float fVar1;
-    float fVar2;
     vec3_t color;
     vec3_t local_48;
     vec3_t local_3c;
@@ -389,14 +387,14 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
     local_3c.y = (stop.y - start.y) * fVar1 + start.y;
     local_3c.z = (stop.z - start.z) * fVar1 + start.z;
 
-    if (shfunk->UNKNOWN_FIELD_0xC == 0 && shmod->nonTransFaces == 1 &&
-            (!shfunk->projtex || (shfunk->projtex->has_transparent_pixels == 0)))
+    if (!shfunk->useTransFaces && shmod->nonTransFaces == TextureShadowMode::IgnoreAlpha &&
+            (!shfunk->projtex || !shfunk->projtex->has_transparent_pixels))
     {
         VectorClear((*out_param_9));
     }
     else {
         float trans;
-        if (shfunk->UNKNOWN_FIELD_0xC != 0) {
+        if (shfunk->useTransFaces) {
             if ((texinfo[dfaces[shfunk->face].texinfo].flags & SURF_TRANS33) == 0) {
                 trans = 0.66f;
             } else {
@@ -406,19 +404,20 @@ int TestLine_shadowfunk(shadowfaces_unk_t *shfunk, shadowmodel_t *shmod, const v
             trans = 1.0f;
         }
 
-        if ((shfunk->projtex && shfunk->projtex->has_transparent_pixels != 0) || (shfunk->maybe_bool != 0))
+        if ((shfunk->projtex && shfunk->projtex->has_transparent_pixels) || 
+            shfunk->cast_single_color_shadow_with_tex_alpha)
         {
-            CHKVAL2("shadowfun-maybebool", shfunk->maybe_bool);
+            CHKVAL2("shadowfun-maybebool", shfunk->cast_single_color_shadow_with_tex_alpha);
             SampleShadowColor(shfunk, local_3c, &color, &dstart);
         }
 
-        if (shfunk->projtex && shfunk->projtex->has_transparent_pixels != 0) {
+        if (shfunk->projtex && shfunk->projtex->has_transparent_pixels) {
             trans = (dstart * trans);
         }
 
-        if (shfunk->maybe_bool == 0) {
-            int c = shfunk->UNKNOWN_FIELD_0xC == 0 ? shmod->nonTransFaces : shmod->transFaces;
-            if (c == 2) {
+        if (!shfunk->cast_single_color_shadow_with_tex_alpha) {
+            TextureShadowMode c = shfunk->useTransFaces ? shmod->transFaces : shmod->nonTransFaces;
+            if (c == TextureShadowMode::SingleColorWithReflectivityColor) {
                 VectorCopy(texture_reflectivity[dfaces[shfunk->face].texinfo], color);
             } else {
                 VectorClear(color);
