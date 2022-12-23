@@ -1451,7 +1451,6 @@ void MakeTransfers(int i)
 {
     int			j;
     vec3_t		delta;
-    int			itrans;
     patch_t		*patch2;
     vec3_t		origin;
     float		transfers[MAX_PATCHES], *all_transfers;
@@ -1551,8 +1550,8 @@ void MakeTransfers(int i)
             dist = splotch_dist;
         }
 
-        float trans = scale * patch2->area / (dist*dist);
-        if (trans < patch_cutoff)
+        float transfer = scale * patch2->area / (dist*dist);
+        if (transfer < patch_cutoff)
             continue;
         CHKVAL2("MakeTransfers-cutoff-pass", true);
 
@@ -1561,16 +1560,16 @@ void MakeTransfers(int i)
             continue;
         CHKVAL2("MakeTransfers-testline-pass", true);
 
-        transfers[j] = trans;
-        if (!(trans <= 0))
+        transfers[j] = transfer;
+        if (!(transfer <= 0))
         {
             CHKVAL2("MakeTransfers-add-tran", true);
-            total += trans;
+            total += transfer;
             patch->numtransfers++;
         }
         else {
             CHKVAL2("MakeTransfers-add-tran", false);
-    }
+        }
     }
 
     // copy the transfers out and normalize
@@ -1595,9 +1594,9 @@ void MakeTransfers(int i)
         int itotal = 0;
         for (j = 0; j < num_patches; j++) {
             if (!(transfers[j] <= 0)) {
-                itrans = sqrt(transfers[j] / total) * 0x10000;
-                itotal += itrans;
-                t->transfer = itrans;
+                int itransfer = sqrt(transfers[j] / total) * 0x10000;
+                itotal += itransfer;
+                t->transfer = itransfer;
                 t->patch = j;
                 t++;
             }
@@ -1857,7 +1856,7 @@ void BuildFacelights(int facenum)
             vec3_t facenormal;
             maybePhongSomething(facenum, l[j].realpt[i], l[0].facenormal, /*out*/facenormal);
 
-            GatherSampleLight(l[j].surfpt[i], l[j].realpt[i], facenormal, styletable, bouncelight, i, tablesize, 1.0 / numsamples);
+            GatherSampleLight(l[j].surfpt[i], l[j].realpt[i], facenormal, styletable, bouncelight, i, tablesize, 1.0f / numsamples);
         }
 
         // contribute the sample to one or more patches
@@ -1875,7 +1874,7 @@ void BuildFacelights(int facenum)
     int patch_count = 0;
     for (patch_t* patch = face_patches[facenum]; patch; patch = patch->next) {
         if (patch->samples) {
-            VectorScale(patch->samplelight, 1.0 / patch->samples, patch->samplelight);
+            VectorScale(patch->samplelight, 1.0f / patch->samples, patch->samplelight);
         } else {
             // printf ("patch with no samples\n");
         }
@@ -2657,25 +2656,17 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
     int local_2160;
 
     // get the PVS for the pos to limit the number of checks
-    if (!PvsForOrigin(pos, pvs))
-    {
+    if (!PvsForOrigin(pos, pvs)) {
         return;
     }
 
-    int numclusters;
-    if (visdatasize == 0) {
-        numclusters = 8;
-    }
-    else {
-        numclusters = dvis->numclusters;
-    }
-
-    for (int i = 0; i < numclusters; i++)
+    int numclusters = (visdatasize == 0 ? 8 : dvis->numclusters);
+    for (int cluster = 0; cluster < numclusters; cluster++)
     {
-        if (!(pvs[i >> 3] & (1 << (i & 7))))
+        if (!(pvs[cluster >> 3] & (1 << (cluster & 7))))
             continue;
 
-        for (l = directlights[i]; l; l = l->m_next)
+        for (l = directlights[cluster]; l; l = l->m_next)
         {
             CHKVAL2("GatherSampleLight-l-orig", l->m_origin);
             CHKVAL2("GatherSampleLight-l-normal", l->m_normal);
@@ -2704,28 +2695,27 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                         //scale = (l->intensity - dist) * dot;
 
                         if (l->m_falloff == Falloff::Linear) {
-                            if (l->m_distance != 1) {
+                            if (l->m_distance != 1.0f) {
                                 dist *= l->m_distance;
                             }
                             if (dist > abs(l->m_intensity)) {
                                 continue; // next l
                             }
                         }
-                        else if (l->m_distance != 1) {
+                        else if (l->m_distance != 1.0f) {
                             if (dist > l->m_distance) {
                                 continue; // next l
                             }
                         }
 
-                        if (l->m_angwait != 1) {
-                            dot = (1.f - l->m_angwait) + dot * l->m_angwait; // dot=>local_res0
+                        if (l->m_angwait != 1.0f) {
+                            dot = (1.0f - l->m_angwait) + dot * l->m_angwait; // dot=>local_res0
                         }
 
                         if (l->m_falloff == Falloff::Linear) {
                             if (l->m_intensity >= 0) {
                                 scale = (l->m_intensity - dist) * dot;
-                            }
-                            else {
+                            } else {
                                 scale = (dist + l->m_intensity) * dot;
                             }
                         }
@@ -2773,14 +2763,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                             dot2 = local_2198_new;
                         }
 
-                        float fVar1;
-                        if (splotchfix == 0) {
-                            fVar1 = 0;
-                        }
-                        else {
-                            fVar1 = l->m_choplight;
-                        }
-
+                        float fVar1 = (splotchfix ? l->m_choplight : 0);
                         if (fVar1 > dist) {
                             float fVar4 = 1 - DotProduct(normal, l->m_normal);
                             if (fVar4 > 1) {
@@ -2924,18 +2907,18 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                                 CHKVAL2("GSL-case3-sunloop-chkdot", true);
                                 continue;
                             }
-                            vec3_t fStack8504;
-                            VectorCopy(sun->direction, fStack8504);
-                            VectorNegate(fStack8504);
+                            vec3_t directionToSun;
+                            VectorCopy(sun->direction, directionToSun);
+                            VectorNegate(directionToSun);
                             VectorSubtract(l->m_origin, pos, delta);
 
                             float fVar1 = DotProduct(delta, l->m_normal) /
-                                DotProduct(fStack8504, l->m_normal);
+                                DotProduct(directionToSun, l->m_normal);
 
                             vec3_t vStack8528;
-                            vStack8528.x = fStack8504.x * fVar1 + pos.x;
-                            vStack8528.y = fStack8504.y * fVar1 + pos.y;
-                            vStack8528.z = fStack8504.z * fVar1 + pos.z;
+                            vStack8528.x = directionToSun.x * fVar1 + pos.x;
+                            vStack8528.y = directionToSun.y * fVar1 + pos.y;
+                            vStack8528.z = directionToSun.z * fVar1 + pos.z;
                             vec3_t vStack8516;
                             VectorSubtract(l->m_origin, vStack8528, vStack8516);
 

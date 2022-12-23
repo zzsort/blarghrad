@@ -1364,17 +1364,13 @@ void FinalLightFace(int facenum)
             VectorCopy(fl->samples[i][j], lb);
             CHKVAL("FinalLightFace-lb", lb);
 
-            if (i == 0)
-            {
+            if (i == 0) {
                 if (numbounce > 0) {
                     vec3_t color;
                     SampleTriangulation(fl->origins[j], trian, color);
-                    if (onlybounce)
-                    {
+                    if (onlybounce) {
                         VectorCopy(color, lb);
-                    }
-                    else
-                    {
+                    } else {
                         VectorAdd(color, lb, lb);
                     }
                 }
@@ -1382,8 +1378,7 @@ void FinalLightFace(int facenum)
                 lb.y += ambient.y + eambient.y;
                 lb.z += ambient.z + eambient.z;
             }
-            else if (onlybounce)
-            {
+            else if (onlybounce) {
                 VectorClear(lb);
             }
 
