@@ -453,41 +453,41 @@ int TestLine_shadowmodel(const vec3_t& start, const vec3_t& stop, vec3_t* out_ve
     shadowmodel_t *shmod;
     vec3_t maxs;
     vec3_t mins;
-    vec3_t local_c;
+    vec3_t length;
 
-    CHKVAL("TestLine_shadowmodel", true);
+    CHKVAL3("TestLine_shadowmodel", true);
 
-    mins.x = mins.y = mins.z = 99999.f;
-    maxs.x = maxs.y = maxs.z = -99999.f;
+    mins.x = mins.y = mins.z = 99999.0f;
+    maxs.x = maxs.y = maxs.z = -99999.0f;
 
     AddPointToBounds(stop, mins, maxs);
     AddPointToBounds(start, mins, maxs);
-    VectorSubtract(stop, start, local_c);
+    VectorSubtract(stop, start, length);
 
     for (shmod = g_shadow_world; shmod; shmod = shmod->next)
     {
         int n = shmod->modelnum;
         if ((n == 0) ||
             ((mins.x < dmodels[n].maxs.x) && (mins.y < dmodels[n].maxs.y) && (mins.z < dmodels[n].maxs.z) &&
-            (maxs.x > dmodels[n].mins.x) && (maxs.y < dmodels[n].mins.y) && (maxs.z < dmodels[n].mins.z)))
+            (maxs.x > dmodels[n].mins.x) && (maxs.y > dmodels[n].mins.y) && (maxs.z > dmodels[n].mins.z)))
         {
-            CHKVAL("TestLine_shadowmodel-innerloop", true);
+            CHKVAL3("TestLine_shadowmodel-innerloop", true);
             for (shfunk = shmod->shadownext; shfunk; shfunk = shfunk->next) {
-                if (TestLine_shadowfunk(shfunk, shmod, mins, maxs, local_c, start, stop, out_vec3, out_param_4)) {
-                    CHKVAL("TestLine_shadowmodel-ret-1", true);
+                if (TestLine_shadowfunk(shfunk, shmod, mins, maxs, length, start, stop, out_vec3, out_param_4)) {
+                    CHKVAL3("TestLine_shadowmodel-ret-1", true);
                     return -1;
                 }
             }
         }
     }
-    CHKVAL("TestLine_shadowmodel-ret-0", true);
+    CHKVAL3("TestLine_shadowmodel-ret-0", true);
     return 0;
 }
 
 int TestLine_shadow(const vec3_t& start, const vec3_t& stop, vec3_t *out_param_3, vec3_t *optional_out_vec)
 {
-    CHKVAL("TestLine_shadow-start", start);
-    CHKVAL("TestLine_shadow-stop", stop);
+    CHKVAL3("TestLine_shadow-start", start);
+    CHKVAL3("TestLine_shadow-stop", stop);
 
     vec3_t local_c = {1, 1, 1};
     int result = TestLine_r(0, &start, &stop, out_param_3);
@@ -500,11 +500,11 @@ int TestLine_shadow(const vec3_t& start, const vec3_t& stop, vec3_t *out_param_3
         VectorClear(local_c);
     }
     if (optional_out_vec) {
-        CHKVAL("TestLine_shadow-outvec", local_c);
+        CHKVAL3("TestLine_shadow-outvec", local_c);
         VectorCopy(local_c, (*optional_out_vec));
     }
 
-    CHKVAL("TestLine_shadow-ret", result);
+    CHKVAL3("TestLine_shadow-ret", result);
     return result;
 }
 

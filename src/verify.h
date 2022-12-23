@@ -44,12 +44,14 @@ extern int progress;
 }
 
 #define CHKVAL
-#define CHKVAL2 CHKVAL_IMPL
+#define CHKVAL2
+#define CHKVAL3 CHKVAL_IMPL
 
 
 #else
 #define CHKVAL
 #define CHKVAL2
+#define CHKVAL3
 #define CHK_ENABLE()
 #define CHK_DISABLE()
 #endif  // ENABLE_VERIFICATION
