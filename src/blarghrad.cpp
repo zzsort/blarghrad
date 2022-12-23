@@ -3271,6 +3271,7 @@ int main(int argc, char **argv)
         "[-noshadowface] [-noshadowfilter] [-noweightcurve] [-noinvisfix] [-nonudgefix]\n"
         "[-nobouncefix] [-noradorigin] [-nosplotchfix] [-nostopbleed]  BSPFILE.BSP     \n";
 
+    printf("----- blarghrad 1.02 based on: -----\n");
     printf("----- ArghRad 3.00T9 by Tim Wright (Argh!) -----\n");
     printf("----- TESTING VERSION, DO NOT REDISTRIBUTE -----\n");
     printf("Modified from original source code by id Software\n\n");
