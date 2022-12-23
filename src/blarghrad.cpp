@@ -3298,17 +3298,23 @@ int main(int argc, char **argv)
     LAB_ARGS_FINISHED:
         ThreadSetDefault();
 
-        if (maxlight > 255)
-            maxlight = 255;
+        if (maxlight > 255.0f)
+            maxlight = 255.0f;
 
-        if (subdiv > 256)
-            subdiv = 256;
+        if (subdiv > 256.0f)
+            subdiv = 256.0f;
 
-        if (choplight == 0) {
+        if (choplight == 0.0f) {
             choplight = subdiv;
+        }
+        if (chopsky == 0.0f) {
             chopsky = subdiv;
+        }
+        if (chopwarp == 0.0f) {
             chopwarp = subdiv;
-            chopcurve = std::max(32.f, subdiv);
+        }
+        if (chopcurve == 0.0f) {
+            chopcurve = std::min(32.0f, subdiv);
         }
 
         if (i != argc - 1) {
