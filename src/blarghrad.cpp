@@ -60,6 +60,7 @@ int lightwarp = 0;
 int _nocolor_maybe_unweighted = 0;
 int dumppatches = 0;
 int extrasamples = 0;
+bool g_noWorldspawnSettings = false;
 
 qboolean	glview;
 qboolean	nopvs;
@@ -3244,6 +3245,287 @@ void UpdateLightmaps(int) {
     NOT_IMPLEMENTED(__FUNCTION__);
 }
 
+bool HandleOverridableSetting(const char* key, const char* value, bool fromCommandLine, int* numSubArgs) {
+    auto IsArg = [&](const char* k) -> bool { return fromCommandLine && !strcmp(key, k); };
+    // entity values must not be empty.
+    auto IsWorldspawn = [&](const char* k) -> bool { return !fromCommandLine && *value && !strcmp(key, k); };
+    // ignore zero so settings can be disabled without deleting the key.
+    auto IsWorldspawnNonZero = [&](const char* k) -> bool { return IsWorldspawn(k) && atoi(value); };
+    auto WorldMsg = [&]() { return fromCommandLine ? "" : " by worldspawn"; };
+
+    *numSubArgs = -1;
+
+    if (IsArg("-gamma") || IsWorldspawn("_gamma")) {
+        g_gamma = atof(value);
+        if (g_gamma <= 0.0f) {
+            g_gamma = 1.0f;
+        }
+        printf(" %s set%s to %.3f  (gamma compensation)\n", key, WorldMsg(), g_gamma);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-bounce") || IsWorldspawn("_bounce")) {
+        numbounce = atoi(value);
+        printf(" %s set%s to %d  (radiosity bounces)\n", key, WorldMsg(), numbounce);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-extra") || IsWorldspawnNonZero("_extra")) {
+        extrasamples = 1;
+        printf(" %s enabled%s  (extra quality light sampling)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-chop") || IsWorldspawn("_chop")) {
+        subdiv = atof(value);
+        printf(" %s set%s to %.1f  (surface patch size)\n", key, WorldMsg(), subdiv);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-chopsky") || IsWorldspawn("_chopsky")) {
+        chopsky = atof(value);
+        printf(" %s set%s to %.1f  (sky patch size)\n", key, WorldMsg(), chopsky);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-chopwarp") || IsWorldspawn("_chopwarp")) {
+        chopwarp = atof(value);
+        printf(" %s set%s to %.1f  (warping patch size)\n", key, WorldMsg(), chopwarp);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-choplight") || IsWorldspawn("_choplight")) {
+        choplight = atof(value);
+        printf(" %s set%s to %.1f  (normal light patch size)\n", key, WorldMsg(), choplight);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-chopcurve") || IsWorldspawn("_chopcurve")) {
+        chopcurve = atof(value);
+        printf(" %s set%s to %.1f  (curve surface patch size)\n", key, WorldMsg(), chopcurve);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-scale") || IsWorldspawn("_scale")) {
+        lightscale = atof(value);
+        printf(" %s set%s to %.4f  (lighting brightness scale)\n", key, WorldMsg(), lightscale);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-direct") || IsWorldspawn("_direct")) {
+        direct_scale *= atof(value);
+        printf(" %s set%s to %.4f  (surface lighting brightness scale)\n", key, WorldMsg(), direct_scale);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-entity") || IsWorldspawn("_entity")) {
+        entity_scale *= atof(value);
+        printf(" %s set%s to %.4f  (entity lighting brightness scale)\n", key, WorldMsg(), entity_scale);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-texscale") || IsWorldspawn("_texscale")) {
+        g_texscale = atof(value);
+        printf(" %s set%s to %.4f  (texture brightness scale)\n", key, WorldMsg(), g_texscale);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-oldtexscale") || IsWorldspawnNonZero("_oldtexscale")) {
+        g_texscale = -1.0f;
+        printf(" %s enabled%s  (old texture brightening method)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-nocolor") || IsWorldspawnNonZero("_nocolor")) {
+        _nocolor_maybe_unweighted = 0;
+        if (saturation <= 1) {
+            saturation = 0;
+        }
+        printf(" %s enabled%s  (lighting converted to greyscale, RGB weighted)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-nocoloru") || IsWorldspawnNonZero("_nocoloru")) {
+        _nocolor_maybe_unweighted = 1;
+        if (saturation <= 1) {
+            saturation = 0;
+        }
+        printf(" %s enabled%s  (lighting converted to greyscale, unweighted)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-saturation") || IsWorldspawn("_saturation")) {
+        saturation = atof(value);
+        if (saturation < 0) {
+            saturation = 0;
+        } else if (saturation > 1) {
+            saturation = 1;
+        }
+        printf(" %s set%s to %.3f  (colored light saturation)\n", key, WorldMsg(), saturation);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-ambient") || IsArg("-ambienta") || IsWorldspawn("_ambient") || IsWorldspawn("_ambienta")) {
+        ambient.x = atof(value);
+        if (!strcmp(key, "-ambient") || !strcmp(key, "_ambient")) {
+            ambient.x *= 128.f;
+        }
+        ambient.y = ambient.x;
+        ambient.z = ambient.x;
+        printf(" %s set%s to %.1f  (global ambient brightness)\n", key, WorldMsg(), ambient.x);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-minlight") || IsWorldspawn("_minlight")) {
+        minlight = atof(value) * 128.f;
+        printf(" -minlighta set%s to %.1f  (minimum lighting brightness)\n", WorldMsg(), minlight);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-minlighta") || IsWorldspawn("_minlighta")) {
+        minlight = atof(value);
+        printf(" -minlighta set%s to %.1f  (minimum lighting brightness)\n", WorldMsg(), minlight);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-maxlight") || IsWorldspawn("_maxlight")) {
+        maxlight = atof(value) * 128.f;
+        printf(" -maxlighta set%s to %.1f  (maximum lighting brightness)\n", WorldMsg(), maxlight);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-maxlighta") || IsWorldspawn("_maxlighta")) {
+        maxlight = atof(value);
+        printf(" -maxlighta set%s to %.1f  (maximum lighting brightness)\n", WorldMsg(), maxlight);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-stylemin") || IsWorldspawn("_stylemin")) {
+        stylemin = atof(value);
+        printf(" %s set%s to %.1f  (min brightness for special lightstyles)\n", key, WorldMsg(), stylemin);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-radmin") || IsWorldspawn("_radmin")) {
+        patch_cutoff = atof(value);
+        printf(" %s set%s to %.4f  (radiosity minimum cutoff)\n", key, WorldMsg(), patch_cutoff);
+        *numSubArgs = 1;
+        return true;
+    }
+    if (IsArg("-nobmodlight") || IsWorldspawnNonZero("_nobmodlight")) {
+        bmodlight = 0;
+        printf(" %s enabled%s  (brush model lighting disabled)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-nobouncefix") || IsWorldspawnNonZero("_nobouncefix")) {
+        bouncefix = 0;
+        printf(" %s enabled%s  (brush model bounced light fix disabled)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-nobrightsurf") || IsWorldspawnNonZero("_nobrightsurf")) {
+        brightsurf = 0;
+        printf(" %s enabled%s  (surface light face brightening disabled)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-nostopbleed") || IsWorldspawnNonZero("_nostopbleed")) {
+        stopbleed = 0;
+        printf(" %s enabled%s  (bleeding light correction disabled)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-nocurve") || IsWorldspawnNonZero("_nocurve")) {
+        nocurve = 1;
+        printf(" %s enabled%s  (Phong shading disabled)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-nosplotchfix") || IsWorldspawnNonZero("_nosplotchfix")) {
+        splotchfix = 0;
+        printf(" %s enabled%s  (anti-splotch fix disabled for plain face lights)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-noradorigin") || IsWorldspawnNonZero("_noradorigin")) {
+        radorigin = 0;
+        printf(" %s enabled%s  (bmodels with origin brushes not lit by radiosity)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-noinvisfix") || IsWorldspawnNonZero("_noinvisfix")) {
+        invisfix = 0;
+        printf(" %s enabled%s  (light bounces off nodraw faces)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-nonudgefix") || IsWorldspawnNonZero("_nonudgefix")) {
+        nudgefix = 0;
+        printf(" %s enabled%s  (uses old method for nudging edge samples)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-lightwarp") || IsWorldspawnNonZero("_lightwarp")) {
+        lightwarp = 1;
+        printf(" %s enabled%s  (calculate lighting on warp surfaces)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-noweightcurve") || IsWorldspawnNonZero("_noweightcurve")) {
+        weightcurve = 0;
+        printf(" %s enabled%s  (Phong calculations ignore face size)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-noshadowfilter") || IsWorldspawnNonZero("_noshadowfilter")) {
+        shadowfilter = 0;
+        printf(" %s enabled%s  (projected shadows not filtered)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-noshadowface") || IsWorldspawnNonZero("_noshadowface")) {
+        g_iTransFaces = TextureShadowMode::DisabledByCommandLine;
+        g_iNonTransFaces = TextureShadowMode::DisabledByCommandLine;
+        printf(" %s enabled%s  (shadowfaces disabled)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+    if (IsArg("-onlybounce") || IsWorldspawnNonZero("_onlybounce")) {
+        onlybounce = 1;
+        printf(" %s enabled%s  (only bounced light saved)\n", key, WorldMsg());
+        *numSubArgs = 0;
+        return true;
+    }
+
+    return false;
+}
+
+bool HandleOverridableSettingFromCommandLine(const char* key, const char* value, int* numSubArgs) {
+    bool handled = HandleOverridableSetting(key, value, true, numSubArgs);
+    if (handled && *numSubArgs < 0) {
+        Error("ERROR - numSubArgs missing for %s", key);
+    }
+    return handled;
+}
+
+void HandleSettingsFromWorldspawn() {
+    if (g_noWorldspawnSettings) {
+        return;
+    }
+    printf("----- Worldspawn Settings -----\n");
+    for (int j = 0; j < num_entities; j++) {
+        entity_t* ent = entities + j;
+        const char* name = ValueForKey(ent, "classname");
+        if (!strcmp(name, "worldspawn")) {
+            for (epair_t* ep = ent->epairs; ep; ep = ep->next) {
+                int numSubArgs; // always 1
+                HandleOverridableSetting(ep->key, ep->value, false, &numSubArgs);
+            }
+            break;
+        }
+    }
+}
 
 
 int main(int argc, char **argv)
@@ -3261,7 +3543,8 @@ int main(int argc, char **argv)
         "[-ambienta|-ambient #] [-maxlighta|-maxlight #] [-minlighta|-minlight #]      \n"
         "[-saturation #] [-nocolor|-nocoloru] [-nobmodlight] [-nobrightsurf] [-nocurve]\n"
         "[-noshadowface] [-noshadowfilter] [-noweightcurve] [-noinvisfix] [-nonudgefix]\n"
-        "[-nobouncefix] [-noradorigin] [-nosplotchfix] [-nostopbleed]  BSPFILE.BSP     \n";
+        "[-nobouncefix] [-noradorigin] [-nosplotchfix] [-nostopbleed]                  \n"
+        "[-noworldspawnsettings] BSPFILE.BSP                                           \n";
 
     printf("----- blarghrad 1.02 based on: -----\n");
     printf("----- ArghRad 3.00T9 by Tim Wright (Argh!) -----\n");
@@ -3316,6 +3599,7 @@ int main(int argc, char **argv)
         printf("reading %s\n", bsp_filename);
         LoadBSPFile(bsp_filename);
         ParseEntities();
+        HandleSettingsFromWorldspawn();
         if (!onlyupdate) {
             MakeShadowModels();
             if (g_texscale == 0) {
@@ -3369,26 +3653,26 @@ LAB_PROCESS_NEXT_ARG:
         return 0;
     }
 
+    int numSubArgs;
+    if (HandleOverridableSettingFromCommandLine(argv[i], argv[i + 1], &numSubArgs)) {
+        i += numSubArgs;
+        goto LAB_CONTINUE;
+    }
+
+    if (!strcmp(argv[i], "-noworldspawnsettings")) {
+        g_noWorldspawnSettings = true;
+        printf(" -noworldspawnsettings enabled  (disable reading settings from worldspawn)\n");
+        goto LAB_CONTINUE;
+    }
     if (!strcmp(argv[i], "-dump")) {
         dumppatches = 1;
         printf(" -dump enabled  (patch info dump)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-bounce")) {
-        numbounce = atoi(argv[i + 1]);
-        printf(" -bounce set to %d  (radiosity bounces)\n", numbounce);
-        i += 1;
         goto LAB_CONTINUE;
     }
     if (!strcmp(argv[i], "-v") ||
         !strcmp(argv[i], "-verbose")) {
         verbose = true;
         printf(" -verbose enabled  (more detailed output)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-extra")) {
-        extrasamples = 1;
-        printf(" -extra enabled  (extra quality light sampling)\n");
         goto LAB_CONTINUE;
     }
     if (!strcmp(argv[i], "-update")) {
@@ -3402,66 +3686,6 @@ LAB_PROCESS_NEXT_ARG:
         i += 1;
         goto LAB_CONTINUE;
     }
-    if (!strcmp(argv[i], "-chop")) {
-        subdiv = atof(argv[i + 1]);
-        printf(" -chop set to %.1f  (surface patch size)\n", subdiv);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-chopsky")) {
-        chopsky = atof(argv[i + 1]);
-        printf(" -chopsky set to %.1f  (sky patch size)\n", chopsky);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-chopwarp")) {
-        chopwarp = atof(argv[i + 1]);
-        printf(" -chopwarp set to %.1f  (warping patch size)\n", chopwarp);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-choplight")) {
-        choplight = atof(argv[i + 1]);
-        printf(" -choplight set to %.1f  (normal light patch size)\n", choplight);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-chopcurve")) {
-        chopcurve = atof(argv[i + 1]);
-        printf(" -chopcurve set to %.1f  (curve surface patch size)\n", chopcurve);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-scale")) {
-        lightscale = atof(argv[i + 1]);
-        printf(" -scale set to %.4f  (lighting brightness scale)\n", lightscale);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-direct")) {
-        direct_scale *= atof(argv[i + 1]);
-        printf(" -direct set to %.4f  (surface lighting brightness scale)\n", direct_scale);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-entity")) {
-        entity_scale *= atof(argv[i + 1]);
-        printf(" -entity set to %.4f  (entity lighting brightness scale)\n", entity_scale);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-texscale")) {
-        g_texscale = atof(argv[i + 1]);
-        printf(" -texscale set to %.4f  (texture brightness scale)\n", g_texscale);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-oldtexscale")) {
-        g_texscale = -1.0f;
-        printf(" -oldtexscale enabled  (old texture brightening method)\n");
-        i += 1;
-        goto LAB_CONTINUE;
-    }
     if (!strcmp(argv[i], "-glview")) {
         glview = 1;
         printf(" -glview enabled  (?)\n");
@@ -3470,158 +3694,6 @@ LAB_PROCESS_NEXT_ARG:
     if (!strcmp(argv[i], "-nopvs")) {
         nopvs = 1;
         printf(" -nopvs enabled  (stop pvs checking)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-nocolor")) {
-        _nocolor_maybe_unweighted = 0;
-        if (saturation <= 1) {
-            saturation = 0;
-        }
-        printf(" -nocolor enabled  (lighting converted to greyscale, RGB weighted)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-nocoloru")) {
-        _nocolor_maybe_unweighted = 1;
-        if (saturation <= 1) {
-            saturation = 0;
-        }
-        printf(" -nocoloru enabled  (lighting converted to greyscale, unweighted)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-saturation")) {
-        saturation = atof(argv[i + 1]);
-        if (saturation < 0) {
-            saturation = 0;
-        }
-        else if (saturation > 1) {
-            saturation = 1;
-        }
-        printf(" -saturation set to %.3f  (colored light saturation)\n", saturation);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-ambient") || !strcmp(argv[i], "-ambienta")) {
-        ambient.x = atof(argv[i + 1]);
-        if (!strcmp(argv[i], "-ambient")) {
-            ambient.x *= 128.f;
-        }
-        ambient.y = ambient.x;
-        ambient.z = ambient.x;
-        printf(" -ambienta set to %.1f  (global ambient brightness)\n", ambient.x);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-minlight")) {
-        minlight = atof(argv[i + 1]) * 128.f;
-        printf(" -minlighta set to %.1f  (minimum lighting brightness)\n", minlight);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-minlighta")) {
-        minlight = atof(argv[i + 1]);
-        printf(" -minlighta set to %.1f  (minimum lighting brightness)\n", minlight);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-maxlight")) {
-        maxlight = atof(argv[i + 1]) * 128.f;
-        printf(" -maxlighta set to %.1f  (maximum lighting brightness)\n", maxlight);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-maxlighta")) {
-        maxlight = atof(argv[i + 1]);
-        printf(" -maxlighta set to %.1f  (maximum lighting brightness)\n", maxlight);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-gamma")) {
-        g_gamma = atof(argv[i + 1]);
-        if (g_gamma <= 0) {
-            g_gamma = 1.f;
-        }
-        printf(" -gamma set to %.3f  (gamma compensation)\n", g_gamma);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-stylemin")) {
-        stylemin = atof(argv[i + 1]);
-        printf(" -stylemin set to %.1f  (min brightness for special lightstyles)\n", stylemin);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-radmin")) {
-        patch_cutoff = atof(argv[i + 1]);
-        printf(" -radmin set to %.4f  (radiosity minimum cutoff)\n", patch_cutoff);
-        i += 1;
-        goto LAB_CONTINUE;
-    }
-
-    if (!strcmp(argv[i], "-nobmodlight")) {
-        bmodlight = 0;
-        printf(" -nobmodlight enabled  (brush model lighting disabled)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-nobouncefix")) {
-        bouncefix = 0;
-        printf(" -nobouncefix enabled  (brush model bounced light fix disabled)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-nobrightsurf")) {
-        brightsurf = 0;
-        printf(" -nobrightsurf enabled  (surface light face brightening disabled)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-nostopbleed")) {
-        stopbleed = 0;
-        printf(" -nostopbleed enabled  (bleeding light correction disabled)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-nocurve")) {
-        nocurve = 1;
-        printf(" -nocurve enabled  (Phong shading disabled)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-nosplotchfix")) {
-        splotchfix = 0;
-        printf(" -nosplotchfix enabled  (anti-splotch fix disabled for plain face lights)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-noradorigin")) {
-        radorigin = 0;
-        printf(" -noradorigin enabled  (bmodels with origin brushes not lit by radiosity)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-noinvisfix")) {
-        invisfix = 0;
-        printf(" -noinvisfix enabled  (light bounces off nodraw faces)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-nonudgefix")) {
-        nudgefix = 0;
-        printf(" -nonudgefix enabled  (uses old method for nudging edge samples)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-lightwarp")) {
-        lightwarp = 1;
-        printf(" -lightwarp enabled  (calculate lighting on warp surfaces)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-noweightcurve")) {
-        weightcurve = 0;
-        printf(" -noweightcurve enabled  (Phong calculations ignore face size)\n");
-        goto LAB_CONTINUE;
-    }
-    if (!strcmp(argv[i], "-noshadowfilter")) {
-        shadowfilter = 0;
-        printf(" -noshadowfilter enabled  (projected shadows not filtered)\n");
-        goto LAB_CONTINUE;
-    }
-
-    if (!strcmp(argv[i], "-noshadowface")) {
-        printf(" -noshadowface enabled  (shadowfaces disabled)\n");
-        g_iTransFaces = TextureShadowMode::DisabledByCommandLine;
-        g_iNonTransFaces = TextureShadowMode::DisabledByCommandLine;
         goto LAB_CONTINUE;
     }
 
@@ -3684,11 +3756,6 @@ LAB_PROCESS_NEXT_ARG:
         goto LAB_CONTINUE;
     }
 
-    if (!strcmp(argv[i], "-onlybounce")) {
-        onlybounce = 1;
-        printf(" -onlybounce enabled  (only bounced light saved)\n");
-        goto LAB_CONTINUE;
-    }
     if (!strcmp(argv[i], "-tmpin")) {
         strcpy(szTempIn, "/tmp");
         goto LAB_CONTINUE;
