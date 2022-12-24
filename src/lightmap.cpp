@@ -44,9 +44,9 @@ typedef struct
     triangle_t	tris[MAX_TRI_TRIS];
     vec3_t		maybe_origins[MAX_TRI_POINTS];   // argh uses this instead of points[]->origins in some places
 } triangulation_t;
-#ifdef _M_IX86
-static_assert(sizeof(triangulation_t) == 4407316, "");
-#endif
+//#ifdef _M_IX86
+//static_assert(sizeof(triangulation_t) == 4407316, "");
+//#endif
 
 /*
 ===============

@@ -408,7 +408,7 @@ bool RelativeFileExists(const char *path)
         pak_t *pak = (modOrGame == 0 ? moddir_paks : gamedir_paks);
         for (; pak; pak = pak->nextpak)
         {
-            for (int i = 0; i < pak->numdir; i++)
+            for (unsigned int i = 0; i < pak->numdir; i++)
             {
                 // copy and ensure the name is null terminated
                 char local_440[sizeof(dpackfile_t::name) + 1];
@@ -826,7 +826,7 @@ int TryLoadTGA(int txnum)
 }
 
 
-void maybe_LoadJPG(const char* filename, byte** bytes, int* width, int* height)
+void maybe_LoadJPG(const char* filename, rgb_t** bytes, int* width, int* height)
 {
     jpeg_decompress_struct cinfo;
     jpeg_error_mgr err;
@@ -846,13 +846,13 @@ void maybe_LoadJPG(const char* filename, byte** bytes, int* width, int* height)
     jpeg_read_header(&cinfo, 1);
     *width = cinfo.image_width;
     *height = cinfo.image_height;
-    *bytes = (byte*)malloc(cinfo.image_width * cinfo.image_height * 3);
+    *bytes = (rgb_t*)malloc(cinfo.image_width * cinfo.image_height * 3);
 
     jpeg_start_decompress(&cinfo);
     int row_stride = cinfo.output_width * cinfo.output_components;
     JSAMPARRAY rowptr = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
 
-    byte* p = *bytes;
+    byte* p = (byte*)*bytes;
     while (cinfo.output_scanline < cinfo.output_height) {
         jpeg_read_scanlines(&cinfo, rowptr, 1);
         if (cinfo.num_components == 3) {
@@ -883,7 +883,7 @@ int TryLoadJPG(int txnum)
         return 0;
     }
 
-    byte* pic = nullptr;
+    rgb_t* pic = nullptr;
     int width, height;
     maybe_LoadJPG(filename, &pic, &width, &height);
     if (!pic) {
@@ -893,18 +893,14 @@ int TryLoadJPG(int txnum)
     projtexture_t *projtex = CreateProjTexture(texturename, width, height);
     const int pixels_size = width * height;
     int sum_for_avg[3] = {};
-    byte* p = pic;
-    for (int i = 0; i < pixels_size; i++, p += 3) {
-        byte r = pic[i * 3 + 0];
-        byte g = pic[i * 3 + 1];
-        byte b = pic[i * 3 + 2];
-        sum_for_avg[0] += r;
-        sum_for_avg[1] += g;
-        sum_for_avg[2] += b;
+    for (int i = 0; i < pixels_size; i++) {
+        sum_for_avg[0] += pic[i].R;
+        sum_for_avg[1] += pic[i].G;
+        sum_for_avg[2] += pic[i].B;
         if (projtex) {
-            projtex->texture32[i].R = r;
-            projtex->texture32[i].G = g;
-            projtex->texture32[i].B = b;
+            projtex->texture32[i].R = pic[i].R;
+            projtex->texture32[i].G = pic[i].G;
+            projtex->texture32[i].B = pic[i].B;
             projtex->texture32[i].A = 255;
         }
         //CHKVAL2("build_sum", sum_for_avg);
@@ -1300,7 +1296,7 @@ float CollectLight(void)
     double total = 0;
 
     patch_t	*patch = patches;
-    for (int i = 0; i < num_patches; i++, patch++)
+    for (unsigned int i = 0; i < num_patches; i++, patch++)
     {
         // skys never collect light, it is just dropped
         if ((texinfo[dfaces[patch->facenum].texinfo].flags & SURF_SKY))
@@ -1373,7 +1369,6 @@ WriteWorld
 */
 void WriteWorld(char *name)
 {
-    int		i, j;
     FILE		*out;
     patch_t		*patch;
     winding_t	*w;
@@ -1382,11 +1377,12 @@ void WriteWorld(char *name)
     if (!out)
         Error("Couldn't open %s", name);
 
-    for (j = 0, patch = patches; j < num_patches; j++, patch++)
+    unsigned int j = 0;
+    for (patch = patches; j < num_patches; j++, patch++)
     {
         w = patch->winding;
         fprintf(out, "%i\n", w->numpoints);
-        for (i = 0; i < w->numpoints; i++)
+        for (int i = 0; i < w->numpoints; i++)
         {
             fprintf(out, "%5.2f %5.2f %5.2f %5.3f %5.3f %5.3f\n",
                 w->p[i].x,
@@ -1410,22 +1406,21 @@ BounceLight
 */
 void BounceLight(void)
 {
-    int		i, j;
     float	added;
     char	name[64];
     patch_t	*p;
 
-    for (i = 0; i < num_patches; i++)
+    for (unsigned int i = 0; i < num_patches; i++)
     {
         p = &patches[i];
-        for (j = 0; j < 3; j++)
+        for (int j = 0; j < 3; j++)
         {
             //			p->totallight[j] = p->samplelight[j];
             radiosity[i].data[j] = p->samplelight.data[j] * p->reflectivity.data[j] * p->area;
         }
     }
 
-    for (i = 0; i < numbounce; i++)
+    for (int i = 0; i < numbounce; i++)
     {
         RunThreadsOn(num_patches, false, ShootLight);
         added = CollectLight();
@@ -1449,7 +1444,6 @@ std::atomic<int> total_transfer;
 
 void MakeTransfers(int i)
 {
-    int			j;
     vec3_t		delta;
     patch_t		*patch2;
     vec3_t		origin;
@@ -1487,7 +1481,8 @@ void MakeTransfers(int i)
 
     all_transfers = transfers;
     patch->numtransfers = 0;
-    for (j = 0, patch2 = patches; j < num_patches; j++, patch2++)
+    unsigned int j = 0;
+    for (patch2 = patches; j < num_patches; j++, patch2++)
     {
         transfers[j] = 0;
 
@@ -1615,7 +1610,7 @@ FreeTransfers
 */
 void FreeTransfers()
 {
-    for (int i = 0; i < num_patches; i++)
+    for (unsigned int i = 0; i < num_patches; i++)
     {
         free(patches[i].transfers);
         patches[i].transfers = NULL;
@@ -1719,12 +1714,9 @@ void BuildFaceGroups()
 // NOTE: original arghrad comments out the Error() call, so it runs but no-ops.
 void CheckPatches(void)
 {
-    int		i;
-    patch_t	*patch;
-
-    for (i = 0; i < num_patches; i++)
+    for (unsigned int i = 0; i < num_patches; i++)
     {
-        patch = &patches[i];
+        patch_t *patch = &patches[i];
         if (patch->totallight.x < 0 || patch->totallight.y < 0 || patch->totallight.z < 0)
             Error("negative patch totallight\n");
     }
@@ -2208,7 +2200,7 @@ void CreateDirectLights()
                 the_9_suns[i].direction = { 0, 0, -1 };
                 the_9_suns[i].target = nullptr;
                 the_9_suns[i].style = 0;
-                the_9_suns[i].bool_maybe_sun_is_active = 0;
+                the_9_suns[i].sun_is_active = false;
                 if (i == 0) {
                     sprintf(key_prefix, "_sun");
                 }
@@ -2219,7 +2211,7 @@ void CreateDirectLights()
                 fVar23 = FloatForKey(ent, local_28);
                 if (fVar23 != 0) {
                     the_9_suns[i].light = fVar23;
-                    the_9_suns[i].bool_maybe_sun_is_active = 1;
+                    the_9_suns[i].sun_is_active = true;
                 }
                 sprintf(local_28, "%s_diffuse", key_prefix);
                 fVar23 = FloatForKey(ent, local_28);
@@ -2230,7 +2222,7 @@ void CreateDirectLights()
                     else {
                         the_9_suns[i].diffuse = fVar23;
                     }
-                    the_9_suns[i].bool_maybe_sun_is_active = 1;
+                    the_9_suns[i].sun_is_active = true;
                 }
                 sprintf(local_28, "%s_diffade", key_prefix);
                 fVar23 = FloatForKey(ent, local_28);
@@ -2246,7 +2238,7 @@ void CreateDirectLights()
                 GetVectorForKey(ent, local_28, the_9_suns[i].color);
                 if (the_9_suns[i].color.x || the_9_suns[i].color.y || the_9_suns[i].color.z) {
                     VectorNormalize(the_9_suns[i].color, the_9_suns[i].color);
-                    the_9_suns[i].bool_maybe_sun_is_active = 1;
+                    the_9_suns[i].sun_is_active = true;
                 }
                 sprintf(local_28, "%s_target", key_prefix);
                 pcVar4 = ValueForKey(ent, local_28);
@@ -2284,7 +2276,7 @@ void CreateDirectLights()
                 }
                 else {
                 LAB_00407fd9:
-                    the_9_suns[i].bool_maybe_sun_is_active = 1;
+                    the_9_suns[i].sun_is_active = true;
                 }
 
                 sprintf(local_28, "%s_style", key_prefix);
@@ -2298,9 +2290,9 @@ void CreateDirectLights()
                         iVar11 = (int)FloatForKey(ent_00, "style");
                     }
                     the_9_suns[i].style = iVar11;
-                    the_9_suns[i].bool_maybe_sun_is_active = 1;
+                    the_9_suns[i].sun_is_active = true;
                 }
-                CHKVAL2("CDL-has-sun", the_9_suns[i].bool_maybe_sun_is_active);
+                CHKVAL2("CDL-has-sun", the_9_suns[i].sun_is_active);
             }
 
             g_sky_ambient = 0;
@@ -2518,7 +2510,7 @@ void CreateDirectLights()
                             VectorNormalize(dl->m_normal, dl->m_normal);
 
                             for (int i = 0; i < 9; i++) {
-                                if (the_9_suns[i].bool_maybe_sun_is_active != 0) {
+                                if (the_9_suns[i].sun_is_active) {
                                     if (!strcmp(targetname, the_9_suns[i].target)) {
                                         VectorCopy(dl->m_normal, the_9_suns[i].direction);
                                     }
@@ -2547,14 +2539,14 @@ void CreateDirectLights()
                 if (the_9_suns[i].diffade == 0) {
                     the_9_suns[i].diffade = dl->m_distance;
                 }
-                the_9_suns[i].bool_maybe_sun_is_active = 1;
+                the_9_suns[i].sun_is_active = true;
                 CHKVAL2("CDL-has-sun2", true);
             }
             num_entity_lights++;
         }
     }
 
-    for (int j = 0; j < num_patches; j++)
+    for (unsigned int j = 0; j < num_patches; j++)
     {
         patch_t* patch = &patches[j];
         if (patch->cluster == -1) {
@@ -2579,7 +2571,7 @@ void CreateDirectLights()
 
         bool any_sun = false;
         for (int u = 0; u < 9; u++) {
-            any_sun |= the_9_suns[u].bool_maybe_sun_is_active;
+            any_sun |= the_9_suns[u].sun_is_active;
         }
 
         if ( ((texinfo[dl->m_face->texinfo].flags & SURF_SKY) == 0) ||
@@ -2894,7 +2886,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
                         CHKVAL2("GSL-case3-sunloop", true);
                         for (int j = 0; j < 9; j++) {
                             suninfo_t* sun = &the_9_suns[j];
-                            if (!sun->bool_maybe_sun_is_active) {
+                            if (!sun->sun_is_active) {
                                 CHKVAL2("GSL-case3-sunloop-nosun", true);
                                 continue;
                             }
@@ -3029,7 +3021,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
 
                     for (int j = 0; j < 9; j++) {
                         suninfo_t* sun = &the_9_suns[j];
-                        if ((sun->bool_maybe_sun_is_active != 0) && (sun->style == 0)) {
+                        if ((sun->sun_is_active) && (sun->style == 0)) {
                         
                             vec3_t& color = (sun->color.x || sun->color.y || sun->color.z) ? sun->color : l->m_color;
                             VectorMA(local_2184, sun->light, color, local_2184);
@@ -3067,7 +3059,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
     CHKVAL2("GSL-final-suns", true);
     for (int i = 0; i < 9; i++) {
         suninfo_t* sun = &the_9_suns[i];
-        if (!sun->bool_maybe_sun_is_active) {
+        if (!sun->sun_is_active) {
             continue;
         }
         if (local_2108[i]) {
@@ -3152,7 +3144,7 @@ void GatherSampleLight(const vec3_t& pos, const vec3_t& realpt, const vec3_t& no
             VectorClear(local_2190);
             for (int i = 0; i < 9; i++) {
                 suninfo_t* sun = &the_9_suns[i];
-                if ((sun->bool_maybe_sun_is_active != 0) && (sun->style == 0)) {
+                if ((sun->sun_is_active) && (sun->style == 0)) {
                     val = &sun->color;
                     if (sun->color.x == 0 && sun->color.y == 0 && sun->color.z == 0) {
                         val = &local_215c->m_color;

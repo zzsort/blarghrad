@@ -189,7 +189,7 @@ struct suninfo_t {
     double diffuse;
     double diffade;
     int style;
-    int bool_maybe_sun_is_active;
+    bool sun_is_active;
 };
 
 // temporary - remove
