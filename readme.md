@@ -8,7 +8,11 @@ The decompiled source code has been merged with the original Quake 2 tools sourc
 
 The main tools used were Ghidra, Ida and windbg. The process of creating the initial release took about 4 weeks using my spare time.
 
+## 1.02 New Features
 
+- Fixed transparent textures not casting shadows.
+- Fixed artifacts in shadows cast from transparent textures. 
+- Most settings can now be set in worldspawn as an alternative to being passed on the command line. Worldspawn key names are the same as the command line options, except they start with an underscore instead of a dash (e.g., -gamma becomes _gamma). For arguments with no value (e.g., -nocurve), the worldspawn value should be "1" to make it active, or "0" can be used to ignore that setting. Worldspawn settings can be disabled with the -noworldspawnsettings command line argument.
 
 ## Current status / TODO:
 
